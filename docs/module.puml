@@ -1,0 +1,66 @@
+@startuml
+'https://plantuml.com/component-diagram
+
+component Module {
+  portin i1
+  portin i2
+
+  component J1 {
+    portin a1
+    portin a2
+    portin a3
+    portout J1.out
+  }
+
+  i1 --> [T1]
+
+  [S1] --> a1
+  [T1] --> a2
+  [S3] --> a3
+
+  component J2 {
+    portin b1
+    portin b2
+    portin b3
+    portin b4
+    portout J2.out
+  }
+
+  J1.out --> b1
+  [S2] --> b2
+  [S3] --> b3
+
+  i2 --> [T2]
+  [T2] --> b4
+}
+
+'package "Some Group" {
+'  HTTP - [First Component]
+'  [Another Component]
+'}
+'
+'node "Other Groups" {
+'  FTP - [Second Component]
+'  [First Component] --> FTP
+'}
+'
+'cloud {
+'  [Example 1]
+'}
+'
+'
+'database "MySql" {
+'  folder "This is my folder" {
+'    [Folder 3]
+'  }
+'  frame "Foo" {
+'    [Frame 4]
+'  }
+'}
+'
+'
+'[Another Component] --> [Example 1]
+'[Example 1] --> [Folder 3]
+'[Folder 3] --> [Frame 4]
+
+@enduml
