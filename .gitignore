@@ -1,0 +1,12 @@
+# IntelliJ
+.idea
+
+# Python
+__pycache__
+venv
+
+# Testing
+spark-warehouse
+
+# Obsidian
+.obsidian
