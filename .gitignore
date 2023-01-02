@@ -7,3 +7,6 @@ venv
 
 # Testing
 spark-warehouse
+
+# Obsidian
+.obsidian
