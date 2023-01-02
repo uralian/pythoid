@@ -16,7 +16,7 @@ class Node(Generic[CTX, T]):
 
 class Source(Node[CTX, T]):
     """
-    And abstraction over a function that takes execution context as the argument
+    An abstraction over a function that takes execution context as the argument
     and returning an instance of T.
     """
 
@@ -29,16 +29,8 @@ class Source(Node[CTX, T]):
         return SimpleSource(lambda ctx: other(ctx, self(ctx)))
 
     def __rshift__(self, other: 'Transformer[CTX, T]') -> 'Source[CTX, T]':
-        """Alias for `to_transformer` method."""
+        """Alias for `to_transformer` method, allows 'src >> tx' syntax."""
         return self.to_transformer(other)
-
-    def to_sink(self, other: 'Sink[CTX, T]') -> 'Source[CTX, None]':
-        """Connects the output of this source node to the input of a sink."""
-        return SimpleSource(lambda ctx: other(ctx, self(ctx)))
-
-    def __gt__(self, other: 'Sink[CTX, T]') -> 'Source[CTX, None]':
-        """Alias for `to_sink` method."""
-        return self.to_sink(other)
 
     def to_join(self, other: 'Join[CTX, T]', name: str) -> 'Join[CTX, T]':
         """Connects the output of this source node to an input of a join."""
@@ -47,8 +39,26 @@ class Source(Node[CTX, T]):
                           lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx))))
 
     def __ge__(self, other: 'Tuple[Join[CTX, T], str]') -> 'Join[CTX, T]':
-        """Alias for `to_join` method."""
+        """Alias for `to_join` method, allows 'src >= (join, name)' syntax."""
         return self.to_join(other[0], other[1])
+
+    def to_sink_t(self, other: 'SinkT[CTX, T]') -> 'SinkS[CTX, T]':
+        """Connects the output of this source node to the input of a SinkT."""
+        return SimpleSinkS(lambda ctx: other(ctx, self(ctx)))
+
+    def __gt__(self, other: 'SinkT[CTX, T]') -> 'SinkS[CTX, T]':
+        """Alias for `to_sink_t` method, allows 'src > sink' syntax."""
+        return self.to_sink_t(other)
+
+    def to_sink_j(self, other: 'SinkJ[CTX, T]', name: str) -> 'SinkJ[CTX, T]':
+        """Connects the output of this source node to an input of a SinkJ."""
+        new_names = remove_set_items(other.input_names(), name)
+        return SimpleSinkJ(new_names,
+                           lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx))))
+
+    def __or__(self, other: 'Tuple[SinkJ[CTX, T], str]') -> 'SinkJ[CTX, T]':
+        """Alias for `to_sink_j` method, allows 'src | sink' syntax."""
+        return self.to_sink_j(other[0], other[1])
 
 
 class SimpleSource(Source[CTX, T]):
@@ -63,7 +73,7 @@ class SimpleSource(Source[CTX, T]):
 
 class Transformer(Node[CTX, T]):
     """
-    And abstraction over a function with 2 arguments: the context and instance of type T,
+    An abstraction over a function with 2 arguments: the context and instance of type T,
     which returns an instance of T.
     """
 
@@ -76,16 +86,8 @@ class Transformer(Node[CTX, T]):
         return SimpleTransformer(lambda ctx, arg: other(ctx, self(ctx, arg)))
 
     def __rshift__(self, other: 'Transformer[CTX, T]') -> 'Transformer[CTX, T]':
-        """Alias for `to_transformer` method."""
+        """Alias for `to_transformer` method, allows 'tx1 >> tx2' syntax."""
         return self.to_transformer(other)
-
-    def to_sink(self, other: 'Sink[CTX, T]') -> 'Sink[CTX, T]':
-        """Connects the output of this transformer node to the input of a sink."""
-        return SimpleSink(lambda ctx, arg: other(ctx, self(ctx, arg)))
-
-    def __gt__(self, other: 'Sink[CTX, T]') -> 'Sink[CTX, T]':
-        """Alias for `to_sink` method."""
-        return self.to_sink(other)
 
     def to_join(self, other: 'Join[CTX, T]', name: str, new_name: str = None) -> 'Join[CTX, T]':
         """Connects the output of this transformer node to an input of a join."""
@@ -97,9 +99,31 @@ class Transformer(Node[CTX, T]):
                           ))
 
     def __ge__(self, other: 'Tuple[Join[CTX, T], str, str]') -> 'Join[CTX, T]':
-        """Alias for `to_join` method."""
+        """Alias for `to_join` method, allows for 'tx >= (join, name, new_name)' syntax."""
         new_name = other[2] if len(other) > 2 else None
         return self.to_join(other[0], other[1], new_name)
+
+    def to_sink_t(self, other: 'SinkT[CTX, T]') -> 'SinkT[CTX, T]':
+        """Connects the output of this transformer node to the input of a SinkT."""
+        return SimpleSinkT(lambda ctx, arg: other(ctx, self(ctx, arg)))
+
+    def __gt__(self, other: 'SinkT[CTX, T]') -> 'SinkT[CTX, T]':
+        """Alias for `to_sink_t` method, allows 'src > sink' syntax."""
+        return self.to_sink_t(other)
+
+    def to_sink_j(self, other: 'SinkJ[CTX, T]', name: str, new_name: str = None) -> 'SinkJ[CTX, T]':
+        """Connects the output of this transformer node to an input of a SinkJ."""
+        new_name = new_name or name
+        new_names = add_set_items(remove_set_items(other.input_names(), name), new_name)
+        return SimpleSinkJ(new_names,
+                           lambda ctx, **args: (
+                               other(ctx, **add_dict_entry(args, name, self(ctx, args[new_name])))
+                           ))
+
+    def __or__(self, other: 'Tuple[SinkJ[CTX, T], str, str]') -> 'SinkJ[CTX, T]':
+        """Alias for `to_sink_j` method, allows 'src | (sink, name, new_name)' syntax."""
+        new_name = other[2] if len(other) > 2 else None
+        return self.to_sink_j(other[0], other[1], new_name)
 
 
 class SimpleTransformer(Transformer[CTX, T]):
@@ -109,29 +133,6 @@ class SimpleTransformer(Transformer[CTX, T]):
         self.underlying = func
 
     def __call__(self, ctx: CTX, arg: T) -> T:
-        return self.underlying(ctx, arg)
-
-
-class Sink(Node[CTX, T]):
-    """
-    And abstraction over a function with 2 arguments: the context and instance of type T.
-    This function is supposed to produce some side effects (unlike pure functions like Source or Transformer)
-    and return some kind of handle that would allow the user to further manage those side effects:
-    it can be nothing or a file descriptor or Spark StreamingQuery etc.
-    """
-
-    @abstractmethod
-    def __call__(self, ctx: CTX, arg: T) -> Any:
-        pass
-
-
-class SimpleSink(Sink[CTX, T]):
-    """A simple implementation of Sink interface based on a function passed into constructor."""
-
-    def __init__(self, func: Callable[[CTX, T], Any]) -> None:
-        self.underlying = func
-
-    def __call__(self, ctx: CTX, arg: T) -> Any:
         return self.underlying(ctx, arg)
 
 
@@ -157,14 +158,6 @@ class Join(Node[CTX, T]):
         """Alias for `to_transformer` method."""
         return self.to_transformer(other)
 
-    def to_sink(self, other: 'Sink[CTX, T]') -> 'Join[CTX, T]':
-        """Connects the output of this join node to the input of a sink."""
-        return SimpleJoin(self.input_names(), lambda ctx, **args: other(ctx, self(ctx, **args)))
-
-    def __gt__(self, other: 'Sink[CTX, T]') -> 'Join[CTX, T]':
-        """Alias for `to_sink` method."""
-        return self.to_sink(other)
-
     def to_join(self, other: 'Join[CTX, T]', name: str,
                 inputs_remap: Dict[str, str] = None) -> 'Join[CTX, T]':
         """Connects the output of this join node to an input of another join."""
@@ -182,9 +175,38 @@ class Join(Node[CTX, T]):
         return SimpleJoin(all_names, func)
 
     def __ge__(self, other: 'Tuple[Join[CTX, T], str, Dict[str, str]]') -> 'Join[CTX, T]':
-        """Alias for `to_join` method."""
+        """Alias for `to_join` method, allows 'join1 >= (join2, name, remap)' syntax."""
         remap = other[2] if len(other) > 2 else None
         return self.to_join(other[0], other[1], remap)
+
+    def to_sink_t(self, other: 'SinkT[CTX, T]') -> 'SinkJ[CTX, T]':
+        """Connects the output of this join node to the input of a SinkT."""
+        return SimpleSinkJ(self.input_names(), lambda ctx, **args: other(ctx, self(ctx, **args)))
+
+    def __gt__(self, other: 'SinkT[CTX, T]') -> 'SinkJ[CTX, T]':
+        """Alias for `to_sink` method, allows 'join > sink' syntax."""
+        return self.to_sink_t(other)
+
+    def to_sink_j(self, other: 'SinkJ[CTX, T]', name: str,
+                  inputs_remap: Dict[str, str] = None) -> 'SinkJ[CTX, T]':
+        """Connects the output of this join node to an input of SinkJ."""
+
+        inputs_remap = inputs_remap or {}
+        new2old = dict(((inputs_remap.get(name) or name), name) for name in self.input_names())
+
+        all_names = add_set_items(remove_set_items(other.input_names(), name), *set(new2old.keys()))
+
+        def func(ctx: CTX, **args: T) -> Any:
+            own_args = dict((old_name, args[new_name]) for new_name, old_name in new2old.items())
+            args[name] = self(ctx, **own_args)
+            return other(ctx, **args)
+
+        return SimpleSinkJ(all_names, func)
+
+    def __or__(self, other: 'Tuple[SinkJ[CTX, T], str, Dict[str, str]]') -> 'SinkJ[CTX, T]':
+        """Alias for `to_sink_j` method, allows 'join | (sink, name, remap)' syntax."""
+        remap = other[2] if len(other) > 2 else None
+        return self.to_sink_j(other[0], other[1], remap)
 
 
 class SimpleJoin(Join[CTX, T]):
@@ -198,6 +220,74 @@ class SimpleJoin(Join[CTX, T]):
         return self.names
 
     def __call__(self, ctx: CTX, **args: T) -> T:
+        return self.underlying(ctx, **args)
+
+
+class SinkS(Node[CTX, T]):
+    """An abstraction over a function that takes the context argument and produces only side effects."""
+
+    @abstractmethod
+    def __call__(self, ctx: CTX) -> Any:
+        pass
+
+
+class SimpleSinkS(SinkS[CTX, T]):
+    """A simple implementation of SinkS interface based on a function passed into constructor."""
+
+    def __init__(self, func: Callable[[CTX], Any]) -> None:
+        self.underlying = func
+
+    def __call__(self, ctx: CTX) -> Any:
+        return self.underlying(ctx)
+
+
+class SinkT(Node[CTX, T]):
+    """
+    An abstraction over a function that takes the context and one argument of type T
+    and produces only side effects.
+    """
+
+    @abstractmethod
+    def __call__(self, ctx: CTX, arg: T) -> Any:
+        pass
+
+
+class SimpleSinkT(SinkT[CTX, T]):
+    """A simple implementation of SinkT interface based on a function passed into constructor."""
+
+    def __init__(self, func: Callable[[CTX, T], Any]) -> None:
+        self.underlying = func
+
+    def __call__(self, ctx: CTX, arg: T) -> Any:
+        return self.underlying(ctx, arg)
+
+
+class SinkJ(Node[CTX, T]):
+    """
+    An abstraction over a function that takes the context and multiple arguments of type T
+    and produces only side effects.
+    """
+
+    def input_names(self) -> Set[str]:
+        """Returns the names of this node's inputs."""
+        pass
+
+    @abstractmethod
+    def __call__(self, ctx: CTX, **args: T) -> Any:
+        pass
+
+
+class SimpleSinkJ(SinkJ[CTX, T]):
+    """A simple implementation of SinkJ interface based on a function passed into constructor."""
+
+    def __init__(self, names: Set[str], func: Callable[[CTX, KwArg(T)], Any]) -> None:
+        self.names = names
+        self.underlying = func
+
+    def input_names(self) -> Set[str]:
+        return self.names
+
+    def __call__(self, ctx: CTX, **args: T) -> Any:
         return self.underlying(ctx, **args)
 
 

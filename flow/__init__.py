@@ -1,7 +1,7 @@
 from . import frames
 from . import streams
-from .common import Node, Source, Transformer, Sink, Join
-from .common import SimpleSource, SimpleTransformer, SimpleSink, SimpleJoin
+from .common import Node, Source, Transformer, Join, SinkS, SinkT, SinkJ
+from .common import SimpleSource, SimpleTransformer, SimpleJoin, SimpleSinkS, SimpleSinkT, SimpleSinkJ
 
 __all__ = [
     Node,
@@ -9,10 +9,14 @@ __all__ = [
     SimpleSource,
     Transformer,
     SimpleTransformer,
-    Sink,
-    SimpleSink,
     Join,
     SimpleJoin,
+    SinkS,
+    SimpleSinkS,
+    SinkT,
+    SimpleSinkT,
+    SinkJ,
+    SimpleSinkJ,
     frames,
     streams
 ]
