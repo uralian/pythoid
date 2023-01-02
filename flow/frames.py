@@ -4,7 +4,7 @@ from typing import Union, Optional, Dict, Any, Set
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import StructType
 
-from .common import Source, Transformer, Join, Sink
+from .common import Source, Transformer, Join, SinkT
 
 SchemaLike = Union[StructType, str]
 
@@ -53,7 +53,7 @@ class DFQuery(Join[SparkSession, DataFrame]):
 
 
 @dataclass(frozen=True)
-class DFTableSink(Sink[SparkSession, DataFrame]):
+class DFTableSink(SinkT[SparkSession, DataFrame]):
     table_name: str
     format: str
     mode: str
