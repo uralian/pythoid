@@ -3,10 +3,34 @@ from typing import Any, Callable, Dict
 
 from mypy_extensions import KwArg
 
-from flow.common import SimpleSource, SimpleTransformer, SimpleSink, SimpleJoin
+from flow import SimpleSource, SimpleTransformer, SimpleSink, SimpleJoin
+from flow.common import add_set_items, remove_set_items, add_dict_entry
 
 IntCtx = Dict[str, int]
 StrCtx = Dict[str, str]
+
+
+class CommonFunctionsTestCase(unittest.TestCase):
+
+    def test_add_set_items(self):
+        src = {"a", "b", "c"}
+        tgt = add_set_items(src, "x", "b", "z")
+        self.assertSetEqual(src, {"a", "b", "c"})
+        self.assertSetEqual(tgt, {"a", "b", "c", "x", "z"})
+
+    def test_remove_set_items(self):
+        src = {"a", "b", "c", "d", "e"}
+        tgt = remove_set_items(src, "d", "a", "x", "y")
+        self.assertSetEqual(src, {"a", "b", "c", "d", "e"})
+        self.assertSetEqual(tgt, {"b", "c", "e"})
+
+    def test_add_dict_entry(self):
+        src = {"a": 1, "b": 2, "c": 3}
+        tgt1 = add_dict_entry(src, "x", 5)
+        tgt2 = add_dict_entry(tgt1, "a", 9)
+        self.assertDictEqual(src, {"a": 1, "b": 2, "c": 3})
+        self.assertDictEqual(tgt1, {"a": 1, "b": 2, "c": 3, "x": 5})
+        self.assertDictEqual(tgt2, {"a": 9, "b": 2, "c": 3, "x": 5})
 
 
 class SourceTestCase(unittest.TestCase):

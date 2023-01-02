@@ -1,7 +1,7 @@
 from abc import abstractmethod
-from typing import Callable, TypeVar, Generic, Dict, Tuple, Set
-from mypy_extensions import KwArg
+from typing import Callable, TypeVar, Generic, Dict, Tuple, Set, Any
 
+from mypy_extensions import KwArg
 
 # type parameters
 CTX = TypeVar('CTX')  # execution context
@@ -42,7 +42,7 @@ class Source(Node[CTX, T]):
 
     def to_join(self, other: 'Join[CTX, T]', name: str) -> 'Join[CTX, T]':
         """Connects the output of this source node to an input of a join."""
-        new_names = remove_set_item(other.input_names(), name)
+        new_names = remove_set_items(other.input_names(), name)
         return SimpleJoin(new_names,
                           lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx))))
 
@@ -90,7 +90,7 @@ class Transformer(Node[CTX, T]):
     def to_join(self, other: 'Join[CTX, T]', name: str, new_name: str = None) -> 'Join[CTX, T]':
         """Connects the output of this transformer node to an input of a join."""
         new_name = new_name or name
-        new_names = add_set_items(remove_set_item(other.input_names(), name), new_name)
+        new_names = add_set_items(remove_set_items(other.input_names(), name), new_name)
         return SimpleJoin(new_names,
                           lambda ctx, **args: (
                               other(ctx, **add_dict_entry(args, name, self(ctx, args[new_name])))
@@ -114,23 +114,25 @@ class SimpleTransformer(Transformer[CTX, T]):
 
 class Sink(Node[CTX, T]):
     """
-    And abstraction over a function with 2 arguments: the context and instance of type T,
-    which returns nothing.
+    And abstraction over a function with 2 arguments: the context and instance of type T.
+    This function is supposed to produce some side effects (unlike pure functions like Source or Transformer)
+    and return some kind of handle that would allow the user to further manage those side effects:
+    it can be nothing or a file descriptor or Spark StreamingQuery etc.
     """
 
     @abstractmethod
-    def __call__(self, ctx: CTX, arg: T) -> None:
+    def __call__(self, ctx: CTX, arg: T) -> Any:
         pass
 
 
 class SimpleSink(Sink[CTX, T]):
     """A simple implementation of Sink interface based on a function passed into constructor."""
 
-    def __init__(self, func: Callable[[CTX, T], None]) -> None:
+    def __init__(self, func: Callable[[CTX, T], Any]) -> None:
         self.underlying = func
 
-    def __call__(self, ctx: CTX, arg: T) -> None:
-        self.underlying(ctx, arg)
+    def __call__(self, ctx: CTX, arg: T) -> Any:
+        return self.underlying(ctx, arg)
 
 
 class Join(Node[CTX, T]):
@@ -140,6 +142,7 @@ class Join(Node[CTX, T]):
     """
 
     def input_names(self) -> Set[str]:
+        """Returns the names of this node's inputs."""
         pass
 
     @abstractmethod
@@ -169,7 +172,7 @@ class Join(Node[CTX, T]):
         inputs_remap = inputs_remap or {}
         new2old = dict(((inputs_remap.get(name) or name), name) for name in self.input_names())
 
-        all_names = add_set_items(remove_set_item(other.input_names(), name), *set(new2old.keys()))
+        all_names = add_set_items(remove_set_items(other.input_names(), name), *set(new2old.keys()))
 
         def func(ctx: CTX, **args: T) -> T:
             own_args = dict((old_name, args[new_name]) for new_name, old_name in new2old.items())
@@ -199,19 +202,27 @@ class SimpleJoin(Join[CTX, T]):
 
 
 def add_set_items(items: Set[str], *to_add: str) -> Set[str]:
+    """Creates a new set by adding new items to an existing one (does not change the source set)."""
+
     new_items = items.copy()
     for item in to_add:
         new_items.add(item)
     return new_items
 
 
-def remove_set_item(items: Set[str], item: str) -> Set[str]:
+def remove_set_items(items: Set[str], *to_remove: str) -> Set[str]:
+    """Creates a new set by removing elements from an existing one (does not change the source set)."""
+
     new_items = items.copy()
-    new_items.remove(item)
+    for item in to_remove:
+        if item in new_items:
+            new_items.remove(item)
     return new_items
 
 
 def add_dict_entry(dct: Dict[str, T], key: str, value: T) -> Dict[str, T]:
+    """Creates a new dictionary by adding a new entry to an existing one (does not change the source dict)."""
+
     dct2 = dct.copy()
     dct2[key] = value
     return dct2
