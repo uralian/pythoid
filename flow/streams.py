@@ -6,7 +6,7 @@ from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.streaming import StreamingQuery
 from pyspark.sql.types import StructType
 
-from .common import Source, SinkT
+from .common import Source, Stub
 
 SchemaLike = Union[StructType, str]
 
@@ -24,7 +24,7 @@ class StreamFileSource(Source[SparkSession, DataFrame]):
 
 
 @dataclass(frozen=True)
-class StreamFileSink(SinkT[SparkSession, DataFrame]):
+class StreamFileSink(Stub[SparkSession, DataFrame]):
     path: Path
     format: str
 

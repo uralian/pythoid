@@ -11,6 +11,8 @@ from tests import data_filepath
 
 class DFramesTestCase(unittest.TestCase):
 
+    spark: SparkSession
+
     @classmethod
     def setUpClass(cls) -> None:
         warnings.filterwarnings("ignore", category=ResourceWarning)
@@ -25,7 +27,7 @@ class DFramesTestCase(unittest.TestCase):
 
     def test_filesource(self):
         schema = "name string, sex string, age int"
-        src = DFFileSource(path=self.people_file, format="csv", schema=schema, options={"header": True})
+        src = DFFileSource(path=str(self.people_file), format="csv", schema=schema, options={"header": True})
         df = src(self.spark)
         self.assertSetEqual(set(df.collect()), {
             Row(name="john", sex="M", age=25),
@@ -38,7 +40,7 @@ class DFramesTestCase(unittest.TestCase):
 
     def test_pipeline(self):
         schema = "name string, sex string, age int"
-        src = DFFileSource(path=self.people_file, format="csv", schema=schema, options={"header": True})
+        src = DFFileSource(path=str(self.people_file), format="csv", schema=schema, options={"header": True})
         eligible = DFFilter("age >= 18")
         counts = DFSingleTableQuery("select sex, count(*) as count from people group by sex", "people")
         pipeline = src >> eligible >> counts
@@ -49,11 +51,11 @@ class DFramesTestCase(unittest.TestCase):
         })
 
     def test_joined_pipeline(self):
-        people = DFFileSource(path=self.people_file,
+        people = DFFileSource(path=str(self.people_file),
                               format="csv",
                               schema="name string, sex string, age int",
                               options={"header": True})
-        scores = DFFileSource(path=self.scores_file,
+        scores = DFFileSource(path=str(self.scores_file),
                               format="csv",
                               schema="person string, subject string, score int",
                               options={"header": True})
@@ -77,7 +79,7 @@ class DFramesTestCase(unittest.TestCase):
         })
 
     def test_sink(self):
-        src = DFFileSource(path=self.people_file,
+        src = DFFileSource(path=str(self.people_file),
                            format="csv",
                            schema="name string, sex string, age int",
                            options={"header": True})

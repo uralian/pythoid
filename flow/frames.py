@@ -4,7 +4,7 @@ from typing import Union, Optional, Dict, Any, Set
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import StructType
 
-from .common import Source, Transformer, Join, SinkT
+from .common import Source, Transformer, Join, Stub
 
 SchemaLike = Union[StructType, str]
 
@@ -38,13 +38,13 @@ class DFSingleTableQuery(Transformer[SparkSession, DataFrame]):
         return spark.sql(self.sql_query)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True, init=False)
 class DFQuery(Join[SparkSession, DataFrame]):
-    names: Set[str]
     sql_query: str
 
-    def input_names(self) -> Set[str]:
-        return self.names
+    def __init__(self, names: Set[str], sql_query: str) -> None:
+        super().__init__(names)
+        object.__setattr__(self, 'sql_query', sql_query)
 
     def __call__(self, spark: SparkSession, **args: DataFrame) -> DataFrame:
         for name, df in args.items():
@@ -53,7 +53,7 @@ class DFQuery(Join[SparkSession, DataFrame]):
 
 
 @dataclass(frozen=True)
-class DFTableSink(SinkT[SparkSession, DataFrame]):
+class DFTableSink(Stub[SparkSession, DataFrame]):
     table_name: str
     format: str
     mode: str

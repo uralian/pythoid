@@ -26,9 +26,9 @@ The Pythoid type system recognizes the following node types:
 - **Transformer**: An abstraction over a function that takes the execution context and an input value of type $T$ and returns an instance of type $T$: $f(C, T) \rightarrow T$.
 - **Join(n)**: An abstraction over a function with multiple arguments: the execution context followed by one or more named input values of type $T$, which returns an instance of type $T$:  $f(C, T^n) \rightarrow T$. Note that in Pythoid a Join node must explicitly declare the number of arguments ("rank" denoted as $n$ above) it expects, along with their names.
 - **Sink**: An abstraction over a function that produces some *side effects* (unlike pure functions *Source*, *Transformer*, or *Join* that are assumed side effect free). The return value can be some sort of handle that would allow the user to further access those side effects; it can be nothing, or a file descriptor, or Spark `StreamingQuery` reference etc. Depending on the number of input arguments, Sink is further subclassed into three types:
-  - **S-Sink**: A function that takes no arguments of type $T$ and produces nothing but generates side effects: $f(C) \rightarrow \epsilon$
-  - **T-Sink**: A function that takes one argument of type $T$ and produces nothing but side effects: $f(C,T) \rightarrow \epsilon$
-  - **J-Sink(n)**: A function that takes multiple arguments and produces only side effects: $f(C,T^n) \rightarrow \epsilon$
+  - **S-Sink** (a.k.a. **Task**): A function that takes no arguments of type $T$ and produces nothing but generates side effects: $f(C) \rightarrow \epsilon$
+  - **T-Sink** (a.k.a. **Stub**): A function that takes one argument of type $T$ and produces nothing but side effects: $f(C,T) \rightarrow \epsilon$
+  - **J-Sink(n)** (a.k.a. **Module**): A function that takes multiple arguments and produces only side effects: $f(C,T^n) \rightarrow \epsilon$
 
 ### Node composition
 
@@ -111,5 +111,50 @@ We can summarize possible compositions in the table below. Each cell shows the r
 | $f(C, T^m) \rightarrow T$ | $f(C,T^m) \rightarrow T$ | $f(C,T^{m+n-1}) \rightarrow T$ | $f(C,T^m) \rightarrow \epsilon$ | $f(C,T^{m+n-1}) \rightarrow \epsilon$ |
 
 As one can see, a Source composed with a Transformer yields a source, while a Join connected to an input of another Join constitutes a synthetic join with the combined inputs of the two joins; Transformer connected to another node does not change the shape of the resulting node, and so on...
+
+### Functional Syntax
+
+First creating nodes...
+```python
+src1 = FileReader(path="people.csv", format="csv", header=True)
+tx1 = FieldFilter("age > 18")
+src2 = FileReader(path="scores.csv", format="csv", header=True)
+tx2 = FieldFilter("subject == 'math'")
+merge = RecordJoin("a.person == b.person")
+```
+... then connecting them using composition methods:
+```python
+pipe1 = src1.to_transformer(tx1)
+pipe2 = src2.to_transformer(tx2)
+pipeline = pipe2.to_join(pipe1.to_join(merge, "a"), "b")
+```
+... or using their operator form:
+```python
+pipe1 = src1 >> tx1
+pipe2 = src2 >> tx2
+pipeline = pipe2 >= ((pipe1 >= (merge, "a")), "b")
+```
+
+The following methods and operator equivalents are provided for composing the nodes:
+
+|Description|Method|Operator|
+|-|-|-|
+|Connects this node's output to the input of a Transformer|to_transformer|>>|
+|Connects this node's output to an input of a Join|to_join|>=|
+|Connects this node's output to the input of a Stub|to_stub|>|
+|Connects this node's output to an input of a Module|to_module|\||
+
+### Builder Syntax
+
+Composing a large number of nodes together may become messy and hard to read. Alternatively, one can use builder syntax to chain nodes togeter:
+
+```python
+builder = PipelineBuilder()
+builder.connect(src1, tx1)
+builder.connect(src2, tx2)
+builder.connect(tx1, merge, "a")
+builder.connect(tx2, merge, "b")
+pipeline = builder.build()
+```
 
 To be continued.

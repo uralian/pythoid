@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Callable, TypeVar, Generic, Dict, Tuple, Set, Any
+from typing import Callable, TypeVar, Generic, Dict, Tuple, Set, Any, Type
 
 from mypy_extensions import KwArg
 
@@ -7,14 +7,50 @@ from mypy_extensions import KwArg
 CTX = TypeVar('CTX')  # execution context
 T = TypeVar('T')  # data type passed between the pipeline nodes
 
+# node types
+TMultiInput = TypeVar('TMultiInput', bound='MultiInput')
+TSingleInput = TypeVar('TSingleInput', bound='SingleInput')
+TNoInput = TypeVar('TNoInput', bound='NoInput')
 
-# top level classes
 
 class Node(Generic[CTX, T]):
-    """An abstract flow node."""
+    """An abstract dataflow node."""
 
 
-class Source(Node[CTX, T]):
+class NoInput(Node[CTX, T]):
+    """A node that has does not have an input other than the execution context."""
+
+    @abstractmethod
+    def __call__(self, ctx: CTX):
+        raise NotImplementedError("Must be implemented by subclasses")
+
+
+class SingleInput(Node[CTX, T]):
+    """A node that has a single input."""
+
+    @abstractmethod
+    def __call__(self, ctx: CTX, arg: T):
+        raise NotImplementedError("Must be implemented by subclasses")
+
+
+class MultiInput(Node[CTX, T]):
+    """A node that has multiple named inputs."""
+
+    def __init__(self, names: Set[str]) -> None:
+        object.__setattr__(self, 'names', names)
+
+    @abstractmethod
+    def __call__(self, ctx: CTX, **args: T):
+        raise NotImplementedError("Must be implemented by subclasses")
+
+    def input_names(self) -> Set[str]:
+        return self.names
+
+    def input_count(self) -> int:
+        return len(self.input_names())
+
+
+class Source(NoInput[CTX, T]):
     """
     An abstraction over a function that takes execution context as the argument
     and returning an instance of T.
@@ -22,43 +58,46 @@ class Source(Node[CTX, T]):
 
     @abstractmethod
     def __call__(self, ctx: CTX) -> T:
-        pass
+        raise NotImplementedError("Must be implemented by subclasses")
 
     def to_transformer(self, other: 'Transformer[CTX, T]') -> 'Source[CTX, T]':
-        """Connects the output of this source node to the input of a transformer."""
-        return SimpleSource(lambda ctx: other(ctx, self(ctx)))
+        """Connects the output of this source node to the input of a Transformer."""
+        return self._to_single_input(SimpleSource, other)
+
+    def to_join(self, other: 'Join[CTX, T]', name: str) -> 'Join[CTX, T]':
+        """Connects the output of this source node to an input of a Join."""
+        return self._to_multi_input(SimpleJoin, other, name)
+
+    def to_stub(self, other: 'Stub[CTX, T]') -> 'Task[CTX, T]':
+        """Connects the output of this source node to the input of a Stub."""
+        return self._to_single_input(SimpleTask, other)
+
+    def to_module(self, other: 'Module[CTX, T]', name: str) -> 'Module[CTX, T]':
+        """Connects the output of this source node to an input of a Module."""
+        return self._to_multi_input(SimpleModule, other, name)
+
+    def _to_single_input(self, cls: Type[TNoInput], other: SingleInput) -> TNoInput:
+        return cls(lambda ctx: other(ctx, self(ctx)))
+
+    def _to_multi_input(self, cls: Type[TMultiInput], other: MultiInput, name: str) -> TMultiInput:
+        new_names = remove_set_items(other.input_names(), name)
+        return cls(new_names, lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx))))
 
     def __rshift__(self, other: 'Transformer[CTX, T]') -> 'Source[CTX, T]':
         """Alias for `to_transformer` method, allows 'src >> tx' syntax."""
         return self.to_transformer(other)
 
-    def to_join(self, other: 'Join[CTX, T]', name: str) -> 'Join[CTX, T]':
-        """Connects the output of this source node to an input of a join."""
-        new_names = remove_set_items(other.input_names(), name)
-        return SimpleJoin(new_names,
-                          lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx))))
-
     def __ge__(self, other: 'Tuple[Join[CTX, T], str]') -> 'Join[CTX, T]':
         """Alias for `to_join` method, allows 'src >= (join, name)' syntax."""
         return self.to_join(other[0], other[1])
 
-    def to_sink_t(self, other: 'SinkT[CTX, T]') -> 'SinkS[CTX, T]':
-        """Connects the output of this source node to the input of a SinkT."""
-        return SimpleSinkS(lambda ctx: other(ctx, self(ctx)))
+    def __gt__(self, other: 'Stub[CTX, T]') -> 'Task[CTX, T]':
+        """Alias for `to_stub` method, allows 'src > sink' syntax."""
+        return self.to_stub(other)
 
-    def __gt__(self, other: 'SinkT[CTX, T]') -> 'SinkS[CTX, T]':
-        """Alias for `to_sink_t` method, allows 'src > sink' syntax."""
-        return self.to_sink_t(other)
-
-    def to_sink_j(self, other: 'SinkJ[CTX, T]', name: str) -> 'SinkJ[CTX, T]':
-        """Connects the output of this source node to an input of a SinkJ."""
-        new_names = remove_set_items(other.input_names(), name)
-        return SimpleSinkJ(new_names,
-                           lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx))))
-
-    def __or__(self, other: 'Tuple[SinkJ[CTX, T], str]') -> 'SinkJ[CTX, T]':
-        """Alias for `to_sink_j` method, allows 'src | sink' syntax."""
-        return self.to_sink_j(other[0], other[1])
+    def __or__(self, other: 'Tuple[Module[CTX, T], str]') -> 'Module[CTX, T]':
+        """Alias for `to_module` method, allows 'src | sink' syntax."""
+        return self.to_module(other[0], other[1])
 
 
 class SimpleSource(Source[CTX, T]):
@@ -71,7 +110,7 @@ class SimpleSource(Source[CTX, T]):
         return self.underlying(ctx)
 
 
-class Transformer(Node[CTX, T]):
+class Transformer(SingleInput[CTX, T]):
     """
     An abstraction over a function with 2 arguments: the context and instance of type T,
     which returns an instance of T.
@@ -79,51 +118,51 @@ class Transformer(Node[CTX, T]):
 
     @abstractmethod
     def __call__(self, ctx: CTX, arg: T) -> T:
-        pass
+        raise NotImplementedError("Must be implemented by subclasses")
 
     def to_transformer(self, other: 'Transformer[CTX, T]') -> 'Transformer[CTX, T]':
-        """Connects the output of this transformer node to the input of another transformer."""
-        return SimpleTransformer(lambda ctx, arg: other(ctx, self(ctx, arg)))
+        """Connects the output of this transformer node to the input of another Transformer."""
+        return self._to_single_input(SimpleTransformer, other)
+
+    def to_join(self, other: 'Join[CTX, T]', name: str, new_name: str = None) -> 'Join[CTX, T]':
+        """Connects the output of this transformer node to an input of a Join."""
+        return self._to_multi_input(SimpleJoin, other, name, new_name)
+
+    def to_stub(self, other: 'Stub[CTX, T]') -> 'Stub[CTX, T]':
+        """Connects the output of this transformer node to the input of a Stub."""
+        return self._to_single_input(SimpleStub, other)
+
+    def to_module(self, other: 'Module[CTX, T]', name: str, new_name: str = None) -> 'Module[CTX, T]':
+        """Connects the output of this transformer node to an input of a Module."""
+        return self._to_multi_input(SimpleModule, other, name, new_name)
+
+    def _to_single_input(self, cls: Type[TSingleInput], other: SingleInput) -> TSingleInput:
+        return cls(lambda ctx, arg: other(ctx, self(ctx, arg)))
+
+    def _to_multi_input(self, cls: Type[TMultiInput], other: MultiInput,
+                        name: str, new_name: str = None) -> TMultiInput:
+        new_name = new_name or name
+        new_names = add_set_items(remove_set_items(other.input_names(), name), new_name)
+        return cls(new_names,
+                   lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx, args[new_name]))))
 
     def __rshift__(self, other: 'Transformer[CTX, T]') -> 'Transformer[CTX, T]':
         """Alias for `to_transformer` method, allows 'tx1 >> tx2' syntax."""
         return self.to_transformer(other)
-
-    def to_join(self, other: 'Join[CTX, T]', name: str, new_name: str = None) -> 'Join[CTX, T]':
-        """Connects the output of this transformer node to an input of a join."""
-        new_name = new_name or name
-        new_names = add_set_items(remove_set_items(other.input_names(), name), new_name)
-        return SimpleJoin(new_names,
-                          lambda ctx, **args: (
-                              other(ctx, **add_dict_entry(args, name, self(ctx, args[new_name])))
-                          ))
 
     def __ge__(self, other: 'Tuple[Join[CTX, T], str, str]') -> 'Join[CTX, T]':
         """Alias for `to_join` method, allows for 'tx >= (join, name, new_name)' syntax."""
         new_name = other[2] if len(other) > 2 else None
         return self.to_join(other[0], other[1], new_name)
 
-    def to_sink_t(self, other: 'SinkT[CTX, T]') -> 'SinkT[CTX, T]':
-        """Connects the output of this transformer node to the input of a SinkT."""
-        return SimpleSinkT(lambda ctx, arg: other(ctx, self(ctx, arg)))
+    def __gt__(self, other: 'Stub[CTX, T]') -> 'Stub[CTX, T]':
+        """Alias for `to_stub` method, allows 'src > sink' syntax."""
+        return self.to_stub(other)
 
-    def __gt__(self, other: 'SinkT[CTX, T]') -> 'SinkT[CTX, T]':
-        """Alias for `to_sink_t` method, allows 'src > sink' syntax."""
-        return self.to_sink_t(other)
-
-    def to_sink_j(self, other: 'SinkJ[CTX, T]', name: str, new_name: str = None) -> 'SinkJ[CTX, T]':
-        """Connects the output of this transformer node to an input of a SinkJ."""
-        new_name = new_name or name
-        new_names = add_set_items(remove_set_items(other.input_names(), name), new_name)
-        return SimpleSinkJ(new_names,
-                           lambda ctx, **args: (
-                               other(ctx, **add_dict_entry(args, name, self(ctx, args[new_name])))
-                           ))
-
-    def __or__(self, other: 'Tuple[SinkJ[CTX, T], str, str]') -> 'SinkJ[CTX, T]':
-        """Alias for `to_sink_j` method, allows 'src | (sink, name, new_name)' syntax."""
+    def __or__(self, other: 'Tuple[Module[CTX, T], str, str]') -> 'Module[CTX, T]':
+        """Alias for `to_module` method, allows 'src | (sink, name, new_name)' syntax."""
         new_name = other[2] if len(other) > 2 else None
-        return self.to_sink_j(other[0], other[1], new_name)
+        return self.to_module(other[0], other[1], new_name)
 
 
 class SimpleTransformer(Transformer[CTX, T]):
@@ -136,32 +175,39 @@ class SimpleTransformer(Transformer[CTX, T]):
         return self.underlying(ctx, arg)
 
 
-class Join(Node[CTX, T]):
+class Join(MultiInput[CTX, T]):
     """
     And abstraction over a function with multiple arguments: the context and instances of type T,
     which returns an instance of T.
     """
 
-    def input_names(self) -> Set[str]:
-        """Returns the names of this node's inputs."""
-        pass
-
     @abstractmethod
     def __call__(self, ctx: CTX, **args: T) -> T:
-        pass
+        raise NotImplementedError("Must be implemented by subclasses")
 
     def to_transformer(self, other: 'Transformer[CTX, T]') -> 'Join[CTX, T]':
-        """Connects the output of this join node to the input of a transformer."""
-        return SimpleJoin(self.input_names(), lambda ctx, **args: other(ctx, self(ctx, **args)))
-
-    def __rshift__(self, other: 'Transformer[CTX, T]') -> 'Join[CTX, T]':
-        """Alias for `to_transformer` method."""
-        return self.to_transformer(other)
+        """Connects the output of this join node to the input of a Transformer."""
+        return self._to_single_input(SimpleJoin, other)
 
     def to_join(self, other: 'Join[CTX, T]', name: str,
                 inputs_remap: Dict[str, str] = None) -> 'Join[CTX, T]':
-        """Connects the output of this join node to an input of another join."""
+        """Connects the output of this join node to an input of another Join."""
+        return self._to_multi_input(SimpleJoin, other, name, inputs_remap)
 
+    def to_stub(self, other: 'Stub[CTX, T]') -> 'Module[CTX, T]':
+        """Connects the output of this join node to the input of a Stub."""
+        return self._to_single_input(SimpleModule, other)
+
+    def to_module(self, other: 'Module[CTX, T]', name: str,
+                  inputs_remap: Dict[str, str] = None) -> 'Module[CTX, T]':
+        """Connects the output of this join node to an input of Module."""
+        return self._to_multi_input(SimpleModule, other, name, inputs_remap)
+
+    def _to_single_input(self, cls: Type[TMultiInput], other: SingleInput) -> TMultiInput:
+        return cls(self.input_names(), lambda ctx, **args: other(ctx, self(ctx, **args)))
+
+    def _to_multi_input(self, cls: Type[TMultiInput], other: MultiInput, name: str,
+                        inputs_remap: Dict[str, str] = None) -> TMultiInput:
         inputs_remap = inputs_remap or {}
         new2old = dict(((inputs_remap.get(name) or name), name) for name in self.input_names())
 
@@ -172,67 +218,48 @@ class Join(Node[CTX, T]):
             args[name] = self(ctx, **own_args)
             return other(ctx, **args)
 
-        return SimpleJoin(all_names, func)
+        return cls(all_names, func)
+
+    def __rshift__(self, other: 'Transformer[CTX, T]') -> 'Join[CTX, T]':
+        """Alias for `to_transformer` method."""
+        return self.to_transformer(other)
 
     def __ge__(self, other: 'Tuple[Join[CTX, T], str, Dict[str, str]]') -> 'Join[CTX, T]':
         """Alias for `to_join` method, allows 'join1 >= (join2, name, remap)' syntax."""
         remap = other[2] if len(other) > 2 else None
         return self.to_join(other[0], other[1], remap)
 
-    def to_sink_t(self, other: 'SinkT[CTX, T]') -> 'SinkJ[CTX, T]':
-        """Connects the output of this join node to the input of a SinkT."""
-        return SimpleSinkJ(self.input_names(), lambda ctx, **args: other(ctx, self(ctx, **args)))
+    def __gt__(self, other: 'Stub[CTX, T]') -> 'Module[CTX, T]':
+        """Alias for `to_stub` method, allows 'join > sink' syntax."""
+        return self.to_stub(other)
 
-    def __gt__(self, other: 'SinkT[CTX, T]') -> 'SinkJ[CTX, T]':
-        """Alias for `to_sink` method, allows 'join > sink' syntax."""
-        return self.to_sink_t(other)
-
-    def to_sink_j(self, other: 'SinkJ[CTX, T]', name: str,
-                  inputs_remap: Dict[str, str] = None) -> 'SinkJ[CTX, T]':
-        """Connects the output of this join node to an input of SinkJ."""
-
-        inputs_remap = inputs_remap or {}
-        new2old = dict(((inputs_remap.get(name) or name), name) for name in self.input_names())
-
-        all_names = add_set_items(remove_set_items(other.input_names(), name), *set(new2old.keys()))
-
-        def func(ctx: CTX, **args: T) -> Any:
-            own_args = dict((old_name, args[new_name]) for new_name, old_name in new2old.items())
-            args[name] = self(ctx, **own_args)
-            return other(ctx, **args)
-
-        return SimpleSinkJ(all_names, func)
-
-    def __or__(self, other: 'Tuple[SinkJ[CTX, T], str, Dict[str, str]]') -> 'SinkJ[CTX, T]':
-        """Alias for `to_sink_j` method, allows 'join | (sink, name, remap)' syntax."""
+    def __or__(self, other: 'Tuple[Module[CTX, T], str, Dict[str, str]]') -> 'Module[CTX, T]':
+        """Alias for `to_module` method, allows 'join | (sink, name, remap)' syntax."""
         remap = other[2] if len(other) > 2 else None
-        return self.to_sink_j(other[0], other[1], remap)
+        return self.to_module(other[0], other[1], remap)
 
 
 class SimpleJoin(Join[CTX, T]):
     """A simple implementation of Join interface based on a function passed into constructor."""
 
     def __init__(self, names: Set[str], func: Callable[[CTX, KwArg(T)], T]) -> None:
-        self.names = names
+        super().__init__(names)
         self.underlying = func
-
-    def input_names(self) -> Set[str]:
-        return self.names
 
     def __call__(self, ctx: CTX, **args: T) -> T:
         return self.underlying(ctx, **args)
 
 
-class SinkS(Node[CTX, T]):
+class Task(NoInput[CTX, T]):
     """An abstraction over a function that takes the context argument and produces only side effects."""
 
     @abstractmethod
     def __call__(self, ctx: CTX) -> Any:
-        pass
+        raise NotImplementedError("Must be implemented by subclasses")
 
 
-class SimpleSinkS(SinkS[CTX, T]):
-    """A simple implementation of SinkS interface based on a function passed into constructor."""
+class SimpleTask(Task[CTX, T]):
+    """A simple implementation of Task interface based on a function passed into constructor."""
 
     def __init__(self, func: Callable[[CTX], Any]) -> None:
         self.underlying = func
@@ -241,7 +268,7 @@ class SimpleSinkS(SinkS[CTX, T]):
         return self.underlying(ctx)
 
 
-class SinkT(Node[CTX, T]):
+class Stub(SingleInput[CTX, T]):
     """
     An abstraction over a function that takes the context and one argument of type T
     and produces only side effects.
@@ -249,11 +276,11 @@ class SinkT(Node[CTX, T]):
 
     @abstractmethod
     def __call__(self, ctx: CTX, arg: T) -> Any:
-        pass
+        raise NotImplementedError("Must be implemented by subclasses")
 
 
-class SimpleSinkT(SinkT[CTX, T]):
-    """A simple implementation of SinkT interface based on a function passed into constructor."""
+class SimpleStub(Stub[CTX, T]):
+    """A simple implementation of Stub interface based on a function passed into constructor."""
 
     def __init__(self, func: Callable[[CTX, T], Any]) -> None:
         self.underlying = func
@@ -262,30 +289,23 @@ class SimpleSinkT(SinkT[CTX, T]):
         return self.underlying(ctx, arg)
 
 
-class SinkJ(Node[CTX, T]):
+class Module(MultiInput[CTX, T]):
     """
     An abstraction over a function that takes the context and multiple arguments of type T
     and produces only side effects.
     """
 
-    def input_names(self) -> Set[str]:
-        """Returns the names of this node's inputs."""
-        pass
-
     @abstractmethod
     def __call__(self, ctx: CTX, **args: T) -> Any:
-        pass
+        raise NotImplementedError("Must be implemented by subclasses")
 
 
-class SimpleSinkJ(SinkJ[CTX, T]):
-    """A simple implementation of SinkJ interface based on a function passed into constructor."""
+class SimpleModule(Module[CTX, T]):
+    """A simple implementation of Module interface based on a function passed into constructor."""
 
     def __init__(self, names: Set[str], func: Callable[[CTX, KwArg(T)], Any]) -> None:
-        self.names = names
+        super().__init__(names)
         self.underlying = func
-
-    def input_names(self) -> Set[str]:
-        return self.names
 
     def __call__(self, ctx: CTX, **args: T) -> Any:
         return self.underlying(ctx, **args)
