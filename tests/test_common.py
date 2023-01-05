@@ -3,7 +3,14 @@ from typing import Any, Callable, Dict
 
 from mypy_extensions import KwArg
 
-from flow import SimpleSource, SimpleTransformer, SimpleJoin, SimpleTask, SimpleStub, SimpleModule
+from flow import (
+    SimpleSource,
+    SimpleTransformer,
+    SimpleJoin,
+    SimpleTask,
+    SimpleStub,
+    SimpleModule,
+)
 from flow import Source, Transformer, Join, Task, Stub, Module
 from flow.common import add_set_items, remove_set_items, add_dict_entry
 
@@ -12,7 +19,6 @@ StrCtx = Dict[str, str]
 
 
 class CommonFunctionsTestCase(unittest.TestCase):
-
     def test_add_set_items(self):
         src = {"a", "b", "c"}
         tgt = add_set_items(src, "x", "b", "z")
@@ -35,7 +41,6 @@ class CommonFunctionsTestCase(unittest.TestCase):
 
 
 class SourceTestCase(unittest.TestCase):
-
     def test_abstract_source(self):
         src = Source()  # type: ignore
         self.assertRaises(NotImplementedError, src.__call__, None)
@@ -51,7 +56,6 @@ class SourceTestCase(unittest.TestCase):
 
 
 class TransformerTestCase(unittest.TestCase):
-
     def test_abstract_transformer(self):
         tx = Transformer()  # type: ignore
         self.assertRaises(NotImplementedError, tx.__call__, None, 0)
@@ -67,7 +71,6 @@ class TransformerTestCase(unittest.TestCase):
 
 
 class SinkTestCase(unittest.TestCase):
-
     def set_nres(self, n: int) -> str:
         self.nres = n
         return "ok"
@@ -116,7 +119,9 @@ class SinkTestCase(unittest.TestCase):
     def test_int_sink_j(self):
         join = SimpleModule[IntCtx, int](
             {"value", "plus", "times"},
-            lambda ctx, **kw: self.set_nres(ctx["a"] + (kw["value"] + kw["plus"]) * kw["times"])
+            lambda ctx, **kw: self.set_nres(
+                ctx["a"] + (kw["value"] + kw["plus"]) * kw["times"]
+            ),
         )
         self.assertSetEqual(join.input_names(), {"value", "times", "plus"})
         eff = join({"a": 2, "b": 3}, value=3, plus=5, times=2)
@@ -124,7 +129,9 @@ class SinkTestCase(unittest.TestCase):
         self.assertEqual(self.nres, 18)
 
     def test_str_sink_j(self):
-        func: Callable[[None, KwArg(str)], Any] = lambda _, **kw: self.set_sres(kw["a"] + "|" + kw["b"])
+        func: Callable[[None, KwArg(str)], Any] = lambda _, **kw: self.set_sres(
+            kw["a"] + "|" + kw["b"]
+        )
         join = SimpleModule({"a", "b"}, func)
         self.assertSetEqual(join.input_names(), {"a", "b"})
         eff = join(None, a="hi", b="there")
@@ -133,7 +140,6 @@ class SinkTestCase(unittest.TestCase):
 
 
 class JoinTestCase(unittest.TestCase):
-
     def test_abstract_join(self):
         join = Join({"a"})  # type: ignore
         self.assertRaises(NotImplementedError, join.__call__, None)
@@ -141,13 +147,15 @@ class JoinTestCase(unittest.TestCase):
     def test_int_join(self):
         join = SimpleJoin[IntCtx, int](
             {"value", "plus", "times"},
-            lambda ctx, **kw: ctx["a"] + (kw["value"] + kw["plus"]) * kw["times"]
+            lambda ctx, **kw: ctx["a"] + (kw["value"] + kw["plus"]) * kw["times"],
         )
         self.assertSetEqual(join.input_names(), {"value", "times", "plus"})
         self.assertEqual(join({"a": 2, "b": 3}, value=3, plus=5, times=2), 18)
 
     def test_str_join(self):
-        func: Callable[[None, KwArg(str)], str] = lambda _, **kw: kw["a"] + "|" + kw["b"]
+        func: Callable[[None, KwArg(str)], str] = (
+            lambda _, **kw: kw["a"] + "|" + kw["b"]
+        )
         join = SimpleJoin({"a", "b"}, func)
         self.assertSetEqual(join.input_names(), {"a", "b"})
         self.assertEqual(join(None, a="hi", b="there"), "hi|there")
@@ -182,7 +190,6 @@ class AplusBtimesCsinkJ(Module[IntCtx, int]):
 
 
 class PipelineTestCase(unittest.TestCase):
-
     def set_nres(self, n: int) -> str:
         self.nres = n
         return "ok"
@@ -320,7 +327,9 @@ class PipelineTestCase(unittest.TestCase):
 
     def test_join_join_chain_no_remap(self):
         j1 = AplusBtimesCjoin()
-        j2 = SimpleJoin[Any, int]({"d", "e", "f"}, lambda _, **kw: kw["d"] + kw["e"] - kw["f"])
+        j2 = SimpleJoin[Any, int](
+            {"d", "e", "f"}, lambda _, **kw: kw["d"] + kw["e"] - kw["f"]
+        )
         pipe = j1 >= (j2, "d", {})
         self.assertIsInstance(pipe, Join)
         self.assertSetEqual(pipe.input_names(), {"a", "b", "c", "e", "f"})
@@ -328,12 +337,14 @@ class PipelineTestCase(unittest.TestCase):
 
     def test_join_join_chain_with_remap(self):
         j1 = AplusBtimesCjoin()
-        j2 = SimpleJoin[Any, int]({"d", "e", "f"}, lambda _, **kw: kw["d"] + kw["e"] - kw["f"])
+        j2 = SimpleJoin[Any, int](
+            {"d", "e", "f"}, lambda _, **kw: kw["d"] + kw["e"] - kw["f"]
+        )
         pipe = j1 >= (j2, "d", {"a": "aa", "c": "cc"})
         self.assertIsInstance(pipe, Join)
         self.assertSetEqual(pipe.input_names(), {"aa", "b", "cc", "e", "f"})
         self.assertEqual(pipe({}, aa=1, b=2, cc=4, e=8, f=16), 4)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

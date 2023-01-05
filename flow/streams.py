@@ -29,9 +29,10 @@ class StreamFileSink(Stub[SparkSession, DataFrame]):
     format: str
 
     def __call__(self, spark: SparkSession, arg: DataFrame) -> StreamingQuery:
-        return arg.writeStream \
-            .trigger(processingTime="500 millisecond") \
-            .format("json") \
-            .outputMode("append") \
-            .option("checkpointLocation", str(self.path / "cp")) \
+        return (
+            arg.writeStream.trigger(processingTime="500 millisecond")
+            .format("json")
+            .outputMode("append")
+            .option("checkpointLocation", str(self.path / "cp"))
             .start(path=str(self.path))
+        )

@@ -1,7 +1,14 @@
 from . import frames
 from . import streams
 from .common import Node, Source, Transformer, Join, Task, Stub, Module
-from .common import SimpleSource, SimpleTransformer, SimpleJoin, SimpleTask, SimpleStub, SimpleModule
+from .common import (
+    SimpleSource,
+    SimpleTransformer,
+    SimpleJoin,
+    SimpleTask,
+    SimpleStub,
+    SimpleModule,
+)
 
 __all__ = [
     "Node",
@@ -18,5 +25,5 @@ __all__ = [
     "Module",
     "SimpleModule",
     "frames",
-    "streams"
+    "streams",
 ]

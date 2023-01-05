@@ -48,41 +48,55 @@ class StreamTestCase(unittest.TestCase):
 
     def test_filesource(self):
         schema = "name string, sex string, age int"
-        src = StreamFileSource(path=self.srcdir, format="csv", schema=schema, options={"header": True})
+        src = StreamFileSource(
+            path=self.srcdir, format="csv", schema=schema, options={"header": True}
+        )
         tgt = src(self.spark)
 
         self._run_simulation(tgt, "append")
         df = self.spark.sql(f"select * from {self.dbname}.result")
-        self.assertSetEqual(set(df.collect()), {
-            Row(name="john", sex="M", age=25, batch=0),
-            Row(name="jane", sex="F", age=34, batch=0),
-            Row(name="jack", sex="M", age=17, batch=1),
-            Row(name="josh", sex="M", age=52, batch=1),
-            Row(name="jill", sex="F", age=44, batch=1),
-            Row(name="jake", sex="M", age=39, batch=2)
-        })
+        self.assertSetEqual(
+            set(df.collect()),
+            {
+                Row(name="john", sex="M", age=25, batch=0),
+                Row(name="jane", sex="F", age=34, batch=0),
+                Row(name="jack", sex="M", age=17, batch=1),
+                Row(name="josh", sex="M", age=52, batch=1),
+                Row(name="jill", sex="F", age=44, batch=1),
+                Row(name="jake", sex="M", age=39, batch=2),
+            },
+        )
 
     def test_pipeline(self):
         schema = "name string, sex string, age int"
-        src = StreamFileSource(path=self.srcdir, format="csv", schema=schema, options={"header": True})
+        src = StreamFileSource(
+            path=self.srcdir, format="csv", schema=schema, options={"header": True}
+        )
         eligible = DFFilter("age >= 30")
-        counts = DFSingleTableQuery("select sex, count(*) as count from people group by sex", "people")
+        counts = DFSingleTableQuery(
+            "select sex, count(*) as count from people group by sex", "people"
+        )
         pipeline = src >> eligible >> counts
         tgt = pipeline(self.spark)
 
         self._run_simulation(tgt, "complete")
         df = self.spark.sql(f"select * from {self.dbname}.result")
-        self.assertSetEqual(set(df.collect()), {
-            Row(sex="F", count=1, batch=0),
-            Row(sex="M", count=1, batch=1),
-            Row(sex="F", count=2, batch=1),
-            Row(sex="M", count=2, batch=2),
-            Row(sex="F", count=2, batch=2)
-        })
+        self.assertSetEqual(
+            set(df.collect()),
+            {
+                Row(sex="F", count=1, batch=0),
+                Row(sex="M", count=1, batch=1),
+                Row(sex="F", count=2, batch=1),
+                Row(sex="M", count=2, batch=2),
+                Row(sex="F", count=2, batch=2),
+            },
+        )
 
     def test_sink(self):
         schema = "name string, sex string, age int"
-        src = StreamFileSource(path=self.srcdir, format="csv", schema=schema, options={"header": True})
+        src = StreamFileSource(
+            path=self.srcdir, format="csv", schema=schema, options={"header": True}
+        )
         flt = DFFilter("name like 'ja%'")
         tgt = StreamFileSink(path=self.tgtdir, format="json")
         pipeline = src >> flt > tgt
@@ -90,23 +104,28 @@ class StreamTestCase(unittest.TestCase):
         self._run_people_stream()
         sq.stop()
         df = self.spark.read.json(str(self.tgtdir))
-        self.assertSetEqual(set(df.collect()), {
-            Row(age=34, name="jane", sex="F"),
-            Row(age=17, name="jack", sex="M"),
-            Row(age=39, name="jake", sex="M")
-        })
+        self.assertSetEqual(
+            set(df.collect()),
+            {
+                Row(age=34, name="jane", sex="F"),
+                Row(age=17, name="jack", sex="M"),
+                Row(age=39, name="jake", sex="M"),
+            },
+        )
 
     def _run_simulation(self, tgt: DataFrame, out_mode: str):
-
         def test_batch(df: DataFrame, id: int):
-            df.withColumn("batch", lit(id)).write.saveAsTable(f"{self.dbname}.result", mode="append")
+            df.withColumn("batch", lit(id)).write.saveAsTable(
+                f"{self.dbname}.result", mode="append"
+            )
 
-        query = tgt.writeStream \
-            .trigger(processingTime="400 millisecond") \
-            .outputMode(out_mode) \
-            .option("checkpointLocation", str(self.chkdir)) \
-            .foreachBatch(test_batch) \
+        query = (
+            tgt.writeStream.trigger(processingTime="400 millisecond")
+            .outputMode(out_mode)
+            .option("checkpointLocation", str(self.chkdir))
+            .foreachBatch(test_batch)
             .start()
+        )
 
         self._run_people_stream()
 

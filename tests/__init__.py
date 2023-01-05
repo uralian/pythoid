@@ -9,7 +9,7 @@ def cur_dir() -> Path:
 
 def data_dir() -> Path:
     """Returns test data folder."""
-    return Path(os.path.join(cur_dir(), 'data'))
+    return Path(os.path.join(cur_dir(), "data"))
 
 
 def data_filepath(name: str) -> Path:

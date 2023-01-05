@@ -18,7 +18,11 @@ class DFFileSource(Source[SparkSession, DataFrame]):
     options: Dict[str, Any] = field(default_factory=lambda: dict())
 
     def __call__(self, spark: SparkSession) -> DataFrame:
-        return spark.read.format(self.format).options(**self.options).load(str(self.path), schema=self.schema)
+        return (
+            spark.read.format(self.format)
+            .options(**self.options)
+            .load(str(self.path), schema=self.schema)
+        )
 
 
 @dataclass(frozen=True)
@@ -45,7 +49,7 @@ class DFQuery(Join[SparkSession, DataFrame]):
 
     def __init__(self, names: Set[str], sql_query: str) -> None:
         super().__init__(names)
-        object.__setattr__(self, 'sql_query', sql_query)
+        object.__setattr__(self, "sql_query", sql_query)
 
     def __call__(self, ctx: SparkSession, **args: DataFrame) -> DataFrame:
         for name, df in args.items():
@@ -61,4 +65,6 @@ class DFTableSink(Stub[SparkSession, DataFrame]):
     path: Path
 
     def __call__(self, ctx: SparkSession, arg: DataFrame) -> None:
-        arg.write.format(self.format).mode(self.mode).option("path", str(self.path)).saveAsTable(self.table_name)
+        arg.write.format(self.format).mode(self.mode).option(
+            "path", str(self.path)
+        ).saveAsTable(self.table_name)
