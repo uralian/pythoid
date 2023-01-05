@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Union, Optional, Dict, Any
 
@@ -16,7 +16,7 @@ class StreamFileSource(Source[SparkSession, DataFrame]):
     path: Path
     format: str
     schema: Optional[SchemaLike] = None
-    options: Dict[str, Any] = None
+    options: Dict[str, Any] = field(default_factory=lambda: dict())
 
     def __call__(self, spark: SparkSession) -> DataFrame:
         reader = spark.readStream.format(self.format).options(**self.options)

@@ -1,16 +1,21 @@
 from abc import abstractmethod
-from typing import Callable, TypeVar, Generic, Dict, Tuple, Set, Any, Type
+from typing import Callable, TypeVar, Generic, Dict, Tuple, Set, Any, Optional
 
 from mypy_extensions import KwArg
 
-# type parameters
+# data types
 CTX = TypeVar('CTX')  # execution context
 T = TypeVar('T')  # data type passed between the pipeline nodes
 
 # node types
-TMultiInput = TypeVar('TMultiInput', bound='MultiInput')
-TSingleInput = TypeVar('TSingleInput', bound='SingleInput')
 TNoInput = TypeVar('TNoInput', bound='NoInput')
+TSingleInput = TypeVar('TSingleInput', bound='SingleInput')
+TMultiInput = TypeVar('TMultiInput', bound='MultiInput')
+
+# function aliases
+NoInputFunc = Callable[[CTX], T | Any]
+SingleInputFunc = Callable[[CTX, T], T | Any]
+MultiInputFunc = Callable[[CTX, KwArg(T)], T | Any]
 
 
 class Node(Generic[CTX, T]):
@@ -37,14 +42,14 @@ class MultiInput(Node[CTX, T]):
     """A node that has multiple named inputs."""
 
     def __init__(self, names: Set[str]) -> None:
-        object.__setattr__(self, 'names', names)
+        object.__setattr__(self, "names", names)
 
     @abstractmethod
     def __call__(self, ctx: CTX, **args: T):
         raise NotImplementedError("Must be implemented by subclasses")
 
     def input_names(self) -> Set[str]:
-        return self.names
+        return object.__getattribute__(self, "names")
 
     def input_count(self) -> int:
         return len(self.input_names())
@@ -76,10 +81,12 @@ class Source(NoInput[CTX, T]):
         """Connects the output of this source node to an input of a Module."""
         return self._to_multi_input(SimpleModule, other, name)
 
-    def _to_single_input(self, cls: Type[TNoInput], other: SingleInput) -> TNoInput:
+    def _to_single_input(self, cls: Callable[[NoInputFunc], TNoInput], other: SingleInput) -> TNoInput:
         return cls(lambda ctx: other(ctx, self(ctx)))
 
-    def _to_multi_input(self, cls: Type[TMultiInput], other: MultiInput, name: str) -> TMultiInput:
+    def _to_multi_input(self,
+                        cls: Callable[[set[str], MultiInputFunc], TMultiInput],
+                        other: MultiInput, name: str) -> TMultiInput:
         new_names = remove_set_items(other.input_names(), name)
         return cls(new_names, lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx))))
 
@@ -124,7 +131,7 @@ class Transformer(SingleInput[CTX, T]):
         """Connects the output of this transformer node to the input of another Transformer."""
         return self._to_single_input(SimpleTransformer, other)
 
-    def to_join(self, other: 'Join[CTX, T]', name: str, new_name: str = None) -> 'Join[CTX, T]':
+    def to_join(self, other: 'Join[CTX, T]', name: str, new_name: Optional[str] = None) -> 'Join[CTX, T]':
         """Connects the output of this transformer node to an input of a Join."""
         return self._to_multi_input(SimpleJoin, other, name, new_name)
 
@@ -132,19 +139,19 @@ class Transformer(SingleInput[CTX, T]):
         """Connects the output of this transformer node to the input of a Stub."""
         return self._to_single_input(SimpleStub, other)
 
-    def to_module(self, other: 'Module[CTX, T]', name: str, new_name: str = None) -> 'Module[CTX, T]':
+    def to_module(self, other: 'Module[CTX, T]', name: str, new_name: Optional[str] = None) -> 'Module[CTX, T]':
         """Connects the output of this transformer node to an input of a Module."""
         return self._to_multi_input(SimpleModule, other, name, new_name)
 
-    def _to_single_input(self, cls: Type[TSingleInput], other: SingleInput) -> TSingleInput:
+    def _to_single_input(self, cls: Callable[[SingleInputFunc], TSingleInput], other: SingleInput) -> TSingleInput:
         return cls(lambda ctx, arg: other(ctx, self(ctx, arg)))
 
-    def _to_multi_input(self, cls: Type[TMultiInput], other: MultiInput,
-                        name: str, new_name: str = None) -> TMultiInput:
-        new_name = new_name or name
-        new_names = add_set_items(remove_set_items(other.input_names(), name), new_name)
+    def _to_multi_input(self, cls: Callable[[set[str], MultiInputFunc], TMultiInput], other: MultiInput,
+                        name: str, new_name: Optional[str] = None) -> TMultiInput:
+        arg_name: str = new_name or name
+        new_names = add_set_items(remove_set_items(other.input_names(), name), arg_name)
         return cls(new_names,
-                   lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx, args[new_name]))))
+                   lambda ctx, **args: other(ctx, **add_dict_entry(args, name, self(ctx, args[arg_name]))))
 
     def __rshift__(self, other: 'Transformer[CTX, T]') -> 'Transformer[CTX, T]':
         """Alias for `to_transformer` method, allows 'tx1 >> tx2' syntax."""
@@ -190,7 +197,7 @@ class Join(MultiInput[CTX, T]):
         return self._to_single_input(SimpleJoin, other)
 
     def to_join(self, other: 'Join[CTX, T]', name: str,
-                inputs_remap: Dict[str, str] = None) -> 'Join[CTX, T]':
+                inputs_remap: Optional[Dict[str, str]] = None) -> 'Join[CTX, T]':
         """Connects the output of this join node to an input of another Join."""
         return self._to_multi_input(SimpleJoin, other, name, inputs_remap)
 
@@ -199,26 +206,29 @@ class Join(MultiInput[CTX, T]):
         return self._to_single_input(SimpleModule, other)
 
     def to_module(self, other: 'Module[CTX, T]', name: str,
-                  inputs_remap: Dict[str, str] = None) -> 'Module[CTX, T]':
+                  inputs_remap: Optional[Dict[str, str]] = None) -> 'Module[CTX, T]':
         """Connects the output of this join node to an input of Module."""
         return self._to_multi_input(SimpleModule, other, name, inputs_remap)
 
-    def _to_single_input(self, cls: Type[TMultiInput], other: SingleInput) -> TMultiInput:
+    def _to_single_input(self,
+                         cls: Callable[[set[str], MultiInputFunc], TMultiInput],
+                         other: SingleInput) -> TMultiInput:
         return cls(self.input_names(), lambda ctx, **args: other(ctx, self(ctx, **args)))
 
-    def _to_multi_input(self, cls: Type[TMultiInput], other: MultiInput, name: str,
-                        inputs_remap: Dict[str, str] = None) -> TMultiInput:
-        inputs_remap = inputs_remap or {}
-        new2old = dict(((inputs_remap.get(name) or name), name) for name in self.input_names())
+    def _to_multi_input(self, cls: Callable[[set[str], MultiInputFunc], TMultiInput],
+                        other: MultiInput, name: str,
+                        inputs_remap: Optional[Dict[str, str]] = None) -> TMultiInput:
+        remap: dict[str, str] = inputs_remap or {}
+        new2old = dict(((remap.get(name) or name), name) for name in self.input_names())
 
         all_names = add_set_items(remove_set_items(other.input_names(), name), *set(new2old.keys()))
 
-        def func(ctx: CTX, **args: T) -> T:
+        def func(ctx, **args):
             own_args = dict((old_name, args[new_name]) for new_name, old_name in new2old.items())
             args[name] = self(ctx, **own_args)
             return other(ctx, **args)
 
-        return cls(all_names, func)
+        return cls(all_names, func)  # type: ignore
 
     def __rshift__(self, other: 'Transformer[CTX, T]') -> 'Join[CTX, T]':
         """Alias for `to_transformer` method."""

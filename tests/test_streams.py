@@ -16,6 +16,7 @@ from tests import data_filepath
 
 
 class StreamTestCase(unittest.TestCase):
+    spark: SparkSession
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -103,7 +104,7 @@ class StreamTestCase(unittest.TestCase):
         query = tgt.writeStream \
             .trigger(processingTime="400 millisecond") \
             .outputMode(out_mode) \
-            .option("checkpointLocation", self.chkdir) \
+            .option("checkpointLocation", str(self.chkdir)) \
             .foreachBatch(test_batch) \
             .start()
 

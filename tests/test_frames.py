@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 import warnings
+from pathlib import Path
 
 from pyspark import Row
 from pyspark.sql import SparkSession
@@ -10,8 +11,9 @@ from tests import data_filepath
 
 
 class DFramesTestCase(unittest.TestCase):
-
     spark: SparkSession
+    people_file: Path
+    scores_file: Path
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -27,7 +29,7 @@ class DFramesTestCase(unittest.TestCase):
 
     def test_filesource(self):
         schema = "name string, sex string, age int"
-        src = DFFileSource(path=str(self.people_file), format="csv", schema=schema, options={"header": True})
+        src = DFFileSource(path=self.people_file, format="csv", schema=schema, options={"header": True})
         df = src(self.spark)
         self.assertSetEqual(set(df.collect()), {
             Row(name="john", sex="M", age=25),
@@ -40,7 +42,7 @@ class DFramesTestCase(unittest.TestCase):
 
     def test_pipeline(self):
         schema = "name string, sex string, age int"
-        src = DFFileSource(path=str(self.people_file), format="csv", schema=schema, options={"header": True})
+        src = DFFileSource(path=self.people_file, format="csv", schema=schema, options={"header": True})
         eligible = DFFilter("age >= 18")
         counts = DFSingleTableQuery("select sex, count(*) as count from people group by sex", "people")
         pipeline = src >> eligible >> counts
@@ -51,11 +53,11 @@ class DFramesTestCase(unittest.TestCase):
         })
 
     def test_joined_pipeline(self):
-        people = DFFileSource(path=str(self.people_file),
+        people = DFFileSource(path=self.people_file,
                               format="csv",
                               schema="name string, sex string, age int",
                               options={"header": True})
-        scores = DFFileSource(path=str(self.scores_file),
+        scores = DFFileSource(path=self.scores_file,
                               format="csv",
                               schema="person string, subject string, score int",
                               options={"header": True})
@@ -79,15 +81,15 @@ class DFramesTestCase(unittest.TestCase):
         })
 
     def test_sink(self):
-        src = DFFileSource(path=str(self.people_file),
+        src = DFFileSource(path=self.people_file,
                            format="csv",
                            schema="name string, sex string, age int",
                            options={"header": True})
-        tgt_path = tempfile.mkdtemp()
+        tgt_path = Path(tempfile.mkdtemp())
         sink = DFTableSink("result", "parquet", "overwrite", tgt_path)
         pipeline = src > sink
         pipeline(self.spark)
-        df = self.spark.read.parquet(tgt_path)
+        df = self.spark.read.parquet(str(tgt_path))
         self.assertSetEqual(set(df.collect()), {
             Row(name="john", sex="M", age=25),
             Row(name="jane", sex="F", age=34),
