@@ -1,22 +1,36 @@
-from . import frames
-from . import streams
-from .common import Node, Source, Transformer, Join, SinkS, SinkT, SinkJ
-from .common import SimpleSource, SimpleTransformer, SimpleJoin, SimpleSinkS, SimpleSinkT, SimpleSinkJ
+"""Module providing building blocks for Pythoid dataflows."""
+
+from . import frames, streams
+from .common import (
+    Join,
+    Module,
+    Node,
+    SimpleJoin,
+    SimpleModule,
+    SimpleSource,
+    SimpleStub,
+    SimpleTask,
+    SimpleTransformer,
+    Source,
+    Stub,
+    Task,
+    Transformer,
+)
 
 __all__ = [
-    Node,
-    Source,
-    SimpleSource,
-    Transformer,
-    SimpleTransformer,
-    Join,
-    SimpleJoin,
-    SinkS,
-    SimpleSinkS,
-    SinkT,
-    SimpleSinkT,
-    SinkJ,
-    SimpleSinkJ,
-    frames,
-    streams
+    "Node",
+    "Source",
+    "SimpleSource",
+    "Transformer",
+    "SimpleTransformer",
+    "Join",
+    "SimpleJoin",
+    "Task",
+    "SimpleTask",
+    "Stub",
+    "SimpleStub",
+    "Module",
+    "SimpleModule",
+    "frames",
+    "streams",
 ]

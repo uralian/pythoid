@@ -1,0 +1,46 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: detect-private-key
+  - repo: http://github.com/sirwart/ripsecrets
+    rev: v0.1.5
+    hooks:
+      - id: ripsecrets
+  - repo: http://github.com/pre-commit/mirrors-mypy
+    rev: v0.991
+    hooks:
+      - id: mypy
+        args: [--check-untyped-defs]
+        additional_dependencies: [pyspark]
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.9.0
+    hooks:
+      - id: python-use-type-annotations
+  - repo: https://github.com/psf/black
+    rev: 22.12.0
+    hooks:
+      - id: black
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.11.3
+    hooks:
+      - id: isort
+        args: [--profile, black]
+  - repo: https://github.com/PyCQA/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        args: [--ignore, E501]
+  - repo: https://github.com/PyCQA/pylint
+    rev: v2.15.9
+    hooks:
+      - id: pylint
+        args: [--min-public-methods, "0", --good-names, "i,df,sq,tx"]
+        additional_dependencies: [mypy_extensions, pyspark]

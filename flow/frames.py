@@ -1,27 +1,38 @@
-from dataclasses import dataclass
-from typing import Union, Optional, Dict, Any, Set
+"""Module providing building blocks for Pythoid Spark dataflows."""
 
-from pyspark.sql import SparkSession, DataFrame
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, Optional, Set, Union
+
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StructType
 
-from .common import Source, Transformer, Join, SinkT
+from .common import Join, Source, Stub, Transformer
 
 SchemaLike = Union[StructType, str]
 
 
 @dataclass(frozen=True)
 class DFFileSource(Source[SparkSession, DataFrame]):
-    path: str
+    """Loads data from an external file and produces a dataframe."""
+
+    path: Path
     format: str
     schema: Optional[SchemaLike] = None
-    options: Dict[str, Any] = None
+    options: Dict[str, Any] = field(default_factory=dict)
 
     def __call__(self, spark: SparkSession) -> DataFrame:
-        return spark.read.format(self.format).options(**self.options).load(self.path, schema=self.schema)
+        return (
+            spark.read.format(self.format)
+            .options(**self.options)
+            .load(str(self.path), schema=self.schema)
+        )
 
 
 @dataclass(frozen=True)
 class DFFilter(Transformer[SparkSession, DataFrame]):
+    """Filters a dataframe using a condition."""
+
     condition: str
 
     def __call__(self, spark: SparkSession, arg: DataFrame) -> DataFrame:
@@ -30,6 +41,8 @@ class DFFilter(Transformer[SparkSession, DataFrame]):
 
 @dataclass(frozen=True)
 class DFSingleTableQuery(Transformer[SparkSession, DataFrame]):
+    """Runs an SQL query on a single dataframe."""
+
     sql_query: str
     alias: str
 
@@ -38,26 +51,32 @@ class DFSingleTableQuery(Transformer[SparkSession, DataFrame]):
         return spark.sql(self.sql_query)
 
 
-@dataclass(frozen=True)
+@dataclass(kw_only=True, frozen=True, init=False)
 class DFQuery(Join[SparkSession, DataFrame]):
-    names: Set[str]
+    """Runs an SQL query on multiple dataframes."""
+
     sql_query: str
 
-    def input_names(self) -> Set[str]:
-        return self.names
+    def __init__(self, names: Set[str], sql_query: str) -> None:
+        super().__init__(names)
+        object.__setattr__(self, "sql_query", sql_query)
 
-    def __call__(self, spark: SparkSession, **args: DataFrame) -> DataFrame:
+    def __call__(self, ctx: SparkSession, **args: DataFrame) -> DataFrame:
         for name, df in args.items():
             df.createOrReplaceTempView(name)
-        return spark.sql(self.sql_query)
+        return ctx.sql(self.sql_query)
 
 
 @dataclass(frozen=True)
-class DFTableSink(SinkT[SparkSession, DataFrame]):
+class DFTableSink(Stub[SparkSession, DataFrame]):
+    """Saves a dataframe to a table."""
+
     table_name: str
     format: str
     mode: str
-    path: str
+    path: Path
 
     def __call__(self, ctx: SparkSession, arg: DataFrame) -> None:
-        arg.write.format(self.format).mode(self.mode).option("path", self.path).saveAsTable(self.table_name)
+        arg.write.format(self.format).mode(self.mode).option(
+            "path", str(self.path)
+        ).saveAsTable(self.table_name)

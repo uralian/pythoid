@@ -1,17 +1,19 @@
+"""Module providing tests for common Pythoid functionality as well as Spark extensions."""
+
 import os
 from pathlib import Path
 
 
 def cur_dir() -> Path:
     """Returns current folder."""
-    return os.path.dirname(__file__)
+    return Path(os.path.dirname(__file__))
 
 
 def data_dir() -> Path:
     """Returns test data folder."""
-    return os.path.join(cur_dir(), 'data')
+    return Path(os.path.join(cur_dir(), "data"))
 
 
 def data_filepath(name: str) -> Path:
     """Returns a path for a file in test data folder."""
-    return os.path.join(data_dir(), name)
+    return Path(os.path.join(data_dir(), name))

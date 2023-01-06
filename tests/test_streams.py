@@ -1,3 +1,5 @@
+"""Module providing unit tests for Pythoid Spark Streaming blocks."""
+
 import shutil
 import tempfile
 import unittest
@@ -6,16 +8,19 @@ from pathlib import Path
 from time import sleep
 
 from pyspark import Row
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import lit
 from pyspark.sql.streaming import StreamingQuery
 
 from flow.frames import DFFilter, DFSingleTableQuery
-from flow.streams import StreamFileSource, StreamFileSink
+from flow.streams import StreamFileSink, StreamFileSource
 from tests import data_filepath
 
 
 class StreamTestCase(unittest.TestCase):
+    """Test suite for Pythoid Spark Streaming blocks."""
+
+    spark: SparkSession
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -42,46 +47,63 @@ class StreamTestCase(unittest.TestCase):
         for stream in cls.spark.streams.active:
             if stream:
                 stream.processAllAvailable()
-                stream.stop
+                stream.stop()
         cls.spark.stop()
 
     def test_filesource(self):
+        """Tests StreamFileSource block."""
         schema = "name string, sex string, age int"
-        src = StreamFileSource(path=self.srcdir, format="csv", schema=schema, options={"header": True})
+        src = StreamFileSource(
+            path=self.srcdir, format="csv", schema=schema, options={"header": True}
+        )
         tgt = src(self.spark)
 
         self._run_simulation(tgt, "append")
         df = self.spark.sql(f"select * from {self.dbname}.result")
-        self.assertSetEqual(set(df.collect()), {
-            Row(name="john", sex="M", age=25, batch=0),
-            Row(name="jane", sex="F", age=34, batch=0),
-            Row(name="jack", sex="M", age=17, batch=1),
-            Row(name="josh", sex="M", age=52, batch=1),
-            Row(name="jill", sex="F", age=44, batch=1),
-            Row(name="jake", sex="M", age=39, batch=2)
-        })
+        self.assertSetEqual(
+            set(df.collect()),
+            {
+                Row(name="john", sex="M", age=25, batch=0),
+                Row(name="jane", sex="F", age=34, batch=0),
+                Row(name="jack", sex="M", age=17, batch=1),
+                Row(name="josh", sex="M", age=52, batch=1),
+                Row(name="jill", sex="F", age=44, batch=1),
+                Row(name="jake", sex="M", age=39, batch=2),
+            },
+        )
 
     def test_pipeline(self):
+        """Tests simple Spark Streaming pipeline."""
         schema = "name string, sex string, age int"
-        src = StreamFileSource(path=self.srcdir, format="csv", schema=schema, options={"header": True})
+        src = StreamFileSource(
+            path=self.srcdir, format="csv", schema=schema, options={"header": True}
+        )
         eligible = DFFilter("age >= 30")
-        counts = DFSingleTableQuery("select sex, count(*) as count from people group by sex", "people")
+        counts = DFSingleTableQuery(
+            "select sex, count(*) as count from people group by sex", "people"
+        )
         pipeline = src >> eligible >> counts
         tgt = pipeline(self.spark)
 
         self._run_simulation(tgt, "complete")
         df = self.spark.sql(f"select * from {self.dbname}.result")
-        self.assertSetEqual(set(df.collect()), {
-            Row(sex="F", count=1, batch=0),
-            Row(sex="M", count=1, batch=1),
-            Row(sex="F", count=2, batch=1),
-            Row(sex="M", count=2, batch=2),
-            Row(sex="F", count=2, batch=2)
-        })
+        self.assertSetEqual(
+            set(df.collect()),
+            {
+                Row(sex="F", count=1, batch=0),
+                Row(sex="M", count=1, batch=1),
+                Row(sex="F", count=2, batch=1),
+                Row(sex="M", count=2, batch=2),
+                Row(sex="F", count=2, batch=2),
+            },
+        )
 
     def test_sink(self):
+        """Tests StreamFileSink block."""
         schema = "name string, sex string, age int"
-        src = StreamFileSource(path=self.srcdir, format="csv", schema=schema, options={"header": True})
+        src = StreamFileSource(
+            path=self.srcdir, format="csv", schema=schema, options={"header": True}
+        )
         flt = DFFilter("name like 'ja%'")
         tgt = StreamFileSink(path=self.tgtdir, format="json")
         pipeline = src >> flt > tgt
@@ -89,27 +111,32 @@ class StreamTestCase(unittest.TestCase):
         self._run_people_stream()
         sq.stop()
         df = self.spark.read.json(str(self.tgtdir))
-        self.assertSetEqual(set(df.collect()), {
-            Row(age=34, name="jane", sex="F"),
-            Row(age=17, name="jack", sex="M"),
-            Row(age=39, name="jake", sex="M")
-        })
+        self.assertSetEqual(
+            set(df.collect()),
+            {
+                Row(age=34, name="jane", sex="F"),
+                Row(age=17, name="jack", sex="M"),
+                Row(age=39, name="jake", sex="M"),
+            },
+        )
 
     def _run_simulation(self, tgt: DataFrame, out_mode: str):
+        def test_batch(df: DataFrame, batch_id: int):
+            df.withColumn("batch", lit(batch_id)).write.saveAsTable(
+                f"{self.dbname}.result", mode="append"
+            )
 
-        def test_batch(df: DataFrame, id: int):
-            df.withColumn("batch", lit(id)).write.saveAsTable(f"{self.dbname}.result", mode="append")
-
-        query = tgt.writeStream \
-            .trigger(processingTime="400 millisecond") \
-            .outputMode(out_mode) \
-            .option("checkpointLocation", self.chkdir) \
-            .foreachBatch(test_batch) \
+        query = (
+            tgt.writeStream.trigger(processingTime="400 millisecond")
+            .outputMode(out_mode)
+            .option("checkpointLocation", str(self.chkdir))
+            .foreachBatch(test_batch)
             .start()
+        )
 
         self._run_people_stream()
 
-        query.stop
+        query.stop()
 
     def _run_people_stream(self):
         for i in range(1, 4):
