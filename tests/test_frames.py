@@ -1,3 +1,5 @@
+"""Module providing unit tests for Pythoid Spark blocks."""
+
 import tempfile
 import unittest
 import warnings
@@ -6,11 +8,13 @@ from pathlib import Path
 from pyspark import Row
 from pyspark.sql import SparkSession
 
-from flow.frames import DFFileSource, DFFilter, DFSingleTableQuery, DFQuery, DFTableSink
+from flow.frames import DFFileSource, DFFilter, DFQuery, DFSingleTableQuery, DFTableSink
 from tests import data_filepath
 
 
 class DFramesTestCase(unittest.TestCase):
+    """Test suite for Pythoid Spark blocks."""
+
     spark: SparkSession
     people_file: Path
     scores_file: Path
@@ -28,6 +32,7 @@ class DFramesTestCase(unittest.TestCase):
         cls.spark.stop()
 
     def test_filesource(self):
+        """Tests DFFileSource block."""
         schema = "name string, sex string, age int"
         src = DFFileSource(
             path=self.people_file, format="csv", schema=schema, options={"header": True}
@@ -46,6 +51,7 @@ class DFramesTestCase(unittest.TestCase):
         )
 
     def test_pipeline(self):
+        """Tests simple Spark pipeline."""
         schema = "name string, sex string, age int"
         src = DFFileSource(
             path=self.people_file, format="csv", schema=schema, options={"header": True}
@@ -61,6 +67,7 @@ class DFramesTestCase(unittest.TestCase):
         )
 
     def test_joined_pipeline(self):
+        """Tests Spark pipeline with a join."""
         people = DFFileSource(
             path=self.people_file,
             format="csv",
@@ -96,6 +103,7 @@ class DFramesTestCase(unittest.TestCase):
         )
 
     def test_sink(self):
+        """Tests DFTableSink block."""
         src = DFFileSource(
             path=self.people_file,
             format="csv",

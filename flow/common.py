@@ -1,5 +1,7 @@
+"""Module providing building common blocks for Pythoid dataflows."""
+
 from abc import abstractmethod
-from typing import Callable, TypeVar, Generic, Dict, Tuple, Set, Any, Optional
+from typing import Any, Callable, Dict, Generic, Optional, Set, Tuple, TypeVar
 
 from mypy_extensions import KwArg
 
@@ -8,9 +10,9 @@ CTX = TypeVar("CTX")  # execution context
 T = TypeVar("T")  # data type passed between the pipeline nodes
 
 # node types
-TNoInput = TypeVar("TNoInput", bound="NoInput")
-TSingleInput = TypeVar("TSingleInput", bound="SingleInput")
-TMultiInput = TypeVar("TMultiInput", bound="MultiInput")
+NoInputT = TypeVar("NoInputT", bound="NoInput")
+SingleInputT = TypeVar("SingleInputT", bound="SingleInput")
+MultiInputT = TypeVar("MultiInputT", bound="MultiInput")
 
 # function aliases
 NoInputFunc = Callable[[CTX], T | Any]
@@ -49,9 +51,11 @@ class MultiInput(Node[CTX, T]):
         raise NotImplementedError("Must be implemented by subclasses")
 
     def input_names(self) -> Set[str]:
+        """Returns input names for this node."""
         return object.__getattribute__(self, "names")
 
     def input_count(self) -> int:
+        """Returns the number of inputs for this node."""
         return len(self.input_names())
 
 
@@ -82,16 +86,16 @@ class Source(NoInput[CTX, T]):
         return self._to_multi_input(SimpleModule, other, name)
 
     def _to_single_input(
-        self, cls: Callable[[NoInputFunc], TNoInput], other: SingleInput
-    ) -> TNoInput:
+        self, cls: Callable[[NoInputFunc], NoInputT], other: SingleInput
+    ) -> NoInputT:
         return cls(lambda ctx: other(ctx, self(ctx)))
 
     def _to_multi_input(
         self,
-        cls: Callable[[set[str], MultiInputFunc], TMultiInput],
+        cls: Callable[[set[str], MultiInputFunc], MultiInputT],
         other: MultiInput,
         name: str,
-    ) -> TMultiInput:
+    ) -> MultiInputT:
         new_names = remove_set_items(other.input_names(), name)
         return cls(
             new_names,
@@ -156,17 +160,17 @@ class Transformer(SingleInput[CTX, T]):
         return self._to_multi_input(SimpleModule, other, name, new_name)
 
     def _to_single_input(
-        self, cls: Callable[[SingleInputFunc], TSingleInput], other: SingleInput
-    ) -> TSingleInput:
+        self, cls: Callable[[SingleInputFunc], SingleInputT], other: SingleInput
+    ) -> SingleInputT:
         return cls(lambda ctx, arg: other(ctx, self(ctx, arg)))
 
     def _to_multi_input(
         self,
-        cls: Callable[[set[str], MultiInputFunc], TMultiInput],
+        cls: Callable[[set[str], MultiInputFunc], MultiInputT],
         other: MultiInput,
         name: str,
         new_name: Optional[str] = None,
-    ) -> TMultiInput:
+    ) -> MultiInputT:
         arg_name: str = new_name or name
         new_names = add_set_items(remove_set_items(other.input_names(), name), arg_name)
         return cls(
@@ -196,7 +200,10 @@ class Transformer(SingleInput[CTX, T]):
 
 
 class SimpleTransformer(Transformer[CTX, T]):
-    """A simple implementation of Transformer interface based on a function passed into constructor."""
+    """
+    A simple implementation of Transformer interface based on a function
+    passed into constructor.
+    """
 
     def __init__(self, func: Callable[[CTX, T], T]) -> None:
         self.underlying = func
@@ -242,19 +249,19 @@ class Join(MultiInput[CTX, T]):
         return self._to_multi_input(SimpleModule, other, name, inputs_remap)
 
     def _to_single_input(
-        self, cls: Callable[[set[str], MultiInputFunc], TMultiInput], other: SingleInput
-    ) -> TMultiInput:
+        self, cls: Callable[[set[str], MultiInputFunc], MultiInputT], other: SingleInput
+    ) -> MultiInputT:
         return cls(
             self.input_names(), lambda ctx, **args: other(ctx, self(ctx, **args))
         )
 
     def _to_multi_input(
         self,
-        cls: Callable[[set[str], MultiInputFunc], TMultiInput],
+        cls: Callable[[set[str], MultiInputFunc], MultiInputT],
         other: MultiInput,
         name: str,
         inputs_remap: Optional[Dict[str, str]] = None,
-    ) -> TMultiInput:
+    ) -> MultiInputT:
         remap: dict[str, str] = inputs_remap or {}
         new2old = dict(((remap.get(name) or name), name) for name in self.input_names())
 
@@ -306,7 +313,10 @@ class SimpleJoin(Join[CTX, T]):
 
 
 class Task(NoInput[CTX, T]):
-    """An abstraction over a function that takes the context argument and produces only side effects."""
+    """
+    An abstraction over a function that takes the context argument
+    and produces only side effects.
+    """
 
     @abstractmethod
     def __call__(self, ctx: CTX) -> Any:
@@ -376,7 +386,10 @@ def add_set_items(items: Set[str], *to_add: str) -> Set[str]:
 
 
 def remove_set_items(items: Set[str], *to_remove: str) -> Set[str]:
-    """Creates a new set by removing elements from an existing one (does not change the source set)."""
+    """
+    Creates a new set by removing elements from an existing one
+    (does not change the source set).
+    """
 
     new_items = items.copy()
     for item in to_remove:
@@ -386,7 +399,10 @@ def remove_set_items(items: Set[str], *to_remove: str) -> Set[str]:
 
 
 def add_dict_entry(dct: Dict[str, T], key: str, value: T) -> Dict[str, T]:
-    """Creates a new dictionary by adding a new entry to an existing one (does not change the source dict)."""
+    """
+    Creates a new dictionary by adding a new entry to an existing one
+    (does not change the source dict).
+    """
 
     dct2 = dct.copy()
     dct2[key] = value

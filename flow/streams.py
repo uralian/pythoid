@@ -1,8 +1,10 @@
+"""Module providing building blocks for Pythoid Spark Streaming dataflows."""
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Union, Optional, Dict, Any
+from typing import Any, Dict, Optional, Union
 
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.streaming import StreamingQuery
 from pyspark.sql.types import StructType
 
@@ -13,10 +15,12 @@ SchemaLike = Union[StructType, str]
 
 @dataclass(frozen=True)
 class StreamFileSource(Source[SparkSession, DataFrame]):
+    """Loads data from an external file and produces a stream of dataframes."""
+
     path: Path
     format: str
     schema: Optional[SchemaLike] = None
-    options: Dict[str, Any] = field(default_factory=lambda: dict())
+    options: Dict[str, Any] = field(default_factory=dict)
 
     def __call__(self, spark: SparkSession) -> DataFrame:
         reader = spark.readStream.format(self.format).options(**self.options)
@@ -25,6 +29,8 @@ class StreamFileSource(Source[SparkSession, DataFrame]):
 
 @dataclass(frozen=True)
 class StreamFileSink(Stub[SparkSession, DataFrame]):
+    """Loads data stream to an external file."""
+
     path: Path
     format: str
 

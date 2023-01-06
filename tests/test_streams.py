@@ -1,3 +1,5 @@
+"""Module providing unit tests for Pythoid Spark Streaming blocks."""
+
 import shutil
 import tempfile
 import unittest
@@ -6,16 +8,18 @@ from pathlib import Path
 from time import sleep
 
 from pyspark import Row
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import lit
 from pyspark.sql.streaming import StreamingQuery
 
 from flow.frames import DFFilter, DFSingleTableQuery
-from flow.streams import StreamFileSource, StreamFileSink
+from flow.streams import StreamFileSink, StreamFileSource
 from tests import data_filepath
 
 
 class StreamTestCase(unittest.TestCase):
+    """Test suite for Pythoid Spark Streaming blocks."""
+
     spark: SparkSession
 
     @classmethod
@@ -43,10 +47,11 @@ class StreamTestCase(unittest.TestCase):
         for stream in cls.spark.streams.active:
             if stream:
                 stream.processAllAvailable()
-                stream.stop
+                stream.stop()
         cls.spark.stop()
 
     def test_filesource(self):
+        """Tests StreamFileSource block."""
         schema = "name string, sex string, age int"
         src = StreamFileSource(
             path=self.srcdir, format="csv", schema=schema, options={"header": True}
@@ -68,6 +73,7 @@ class StreamTestCase(unittest.TestCase):
         )
 
     def test_pipeline(self):
+        """Tests simple Spark Streaming pipeline."""
         schema = "name string, sex string, age int"
         src = StreamFileSource(
             path=self.srcdir, format="csv", schema=schema, options={"header": True}
@@ -93,6 +99,7 @@ class StreamTestCase(unittest.TestCase):
         )
 
     def test_sink(self):
+        """Tests StreamFileSink block."""
         schema = "name string, sex string, age int"
         src = StreamFileSource(
             path=self.srcdir, format="csv", schema=schema, options={"header": True}
@@ -114,8 +121,8 @@ class StreamTestCase(unittest.TestCase):
         )
 
     def _run_simulation(self, tgt: DataFrame, out_mode: str):
-        def test_batch(df: DataFrame, id: int):
-            df.withColumn("batch", lit(id)).write.saveAsTable(
+        def test_batch(df: DataFrame, batch_id: int):
+            df.withColumn("batch", lit(batch_id)).write.saveAsTable(
                 f"{self.dbname}.result", mode="append"
             )
 
@@ -129,7 +136,7 @@ class StreamTestCase(unittest.TestCase):
 
         self._run_people_stream()
 
-        query.stop
+        query.stop()
 
     def _run_people_stream(self):
         for i in range(1, 4):

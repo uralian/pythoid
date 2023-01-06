@@ -28,3 +28,19 @@ repos:
     rev: 22.12.0
     hooks:
       - id: black
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.11.3
+    hooks:
+      - id: isort
+        args: [--profile, black]
+  - repo: https://github.com/PyCQA/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        args: [--ignore, E501]
+  - repo: https://github.com/PyCQA/pylint
+    rev: v2.15.9
+    hooks:
+      - id: pylint
+        args: [--min-public-methods, "0", --good-names, "i,df,sq,tx"]
+        additional_dependencies: [mypy_extensions, pyspark]

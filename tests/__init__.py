@@ -1,3 +1,5 @@
+"""Module providing tests for common Pythoid functionality as well as Spark extensions."""
+
 import os
 from pathlib import Path
 

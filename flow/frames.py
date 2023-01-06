@@ -1,21 +1,25 @@
+"""Module providing building blocks for Pythoid Spark dataflows."""
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Union, Optional, Dict, Any, Set
+from typing import Any, Dict, Optional, Set, Union
 
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StructType
 
-from .common import Source, Transformer, Join, Stub
+from .common import Join, Source, Stub, Transformer
 
 SchemaLike = Union[StructType, str]
 
 
 @dataclass(frozen=True)
 class DFFileSource(Source[SparkSession, DataFrame]):
+    """Loads data from an external file and produces a dataframe."""
+
     path: Path
     format: str
     schema: Optional[SchemaLike] = None
-    options: Dict[str, Any] = field(default_factory=lambda: dict())
+    options: Dict[str, Any] = field(default_factory=dict)
 
     def __call__(self, spark: SparkSession) -> DataFrame:
         return (
@@ -27,6 +31,8 @@ class DFFileSource(Source[SparkSession, DataFrame]):
 
 @dataclass(frozen=True)
 class DFFilter(Transformer[SparkSession, DataFrame]):
+    """Filters a dataframe using a condition."""
+
     condition: str
 
     def __call__(self, spark: SparkSession, arg: DataFrame) -> DataFrame:
@@ -35,6 +41,8 @@ class DFFilter(Transformer[SparkSession, DataFrame]):
 
 @dataclass(frozen=True)
 class DFSingleTableQuery(Transformer[SparkSession, DataFrame]):
+    """Runs an SQL query on a single dataframe."""
+
     sql_query: str
     alias: str
 
@@ -45,6 +53,8 @@ class DFSingleTableQuery(Transformer[SparkSession, DataFrame]):
 
 @dataclass(kw_only=True, frozen=True, init=False)
 class DFQuery(Join[SparkSession, DataFrame]):
+    """Runs an SQL query on multiple dataframes."""
+
     sql_query: str
 
     def __init__(self, names: Set[str], sql_query: str) -> None:
@@ -59,6 +69,8 @@ class DFQuery(Join[SparkSession, DataFrame]):
 
 @dataclass(frozen=True)
 class DFTableSink(Stub[SparkSession, DataFrame]):
+    """Saves a dataframe to a table."""
+
     table_name: str
     format: str
     mode: str
