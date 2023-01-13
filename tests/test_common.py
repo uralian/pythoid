@@ -1,5 +1,5 @@
 """Module providing unit tests for common Pythoid blocks."""
-
+import logging
 import unittest
 from typing import Any, Callable, Dict
 
@@ -20,6 +20,7 @@ from flow import (
     Transformer,
 )
 from flow.common import add_dict_entry, add_set_items, remove_set_items
+from tests import LOG_DATE_FORMAT, LOG_MSG_FORMAT
 
 IntCtx = Dict[str, int]
 StrCtx = Dict[str, str]
@@ -55,6 +56,11 @@ class CommonFunctionsTestCase(unittest.TestCase):
 class SourceTestCase(unittest.TestCase):
     """A test suite for Pythoid Source class."""
 
+    def setUp(self) -> None:
+        logging.basicConfig(
+            format=LOG_MSG_FORMAT, datefmt=LOG_DATE_FORMAT, level=logging.WARNING
+        )
+
     def test_abstract_source(self):
         """Tests creating an abstract Source instance."""
         src = Source()  # type: ignore
@@ -74,6 +80,11 @@ class SourceTestCase(unittest.TestCase):
 
 class TransformerTestCase(unittest.TestCase):
     """A test suite for Pythoid Transformer class."""
+
+    def setUp(self) -> None:
+        logging.basicConfig(
+            format=LOG_MSG_FORMAT, datefmt=LOG_DATE_FORMAT, level=logging.WARNING
+        )
 
     def test_abstract_transformer(self):
         """Tests creating an abstract Transformer instance."""
@@ -98,6 +109,9 @@ class SinkTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.nres = -1
         self.sres = ""
+        logging.basicConfig(
+            format=LOG_MSG_FORMAT, datefmt=LOG_DATE_FORMAT, level=logging.WARNING
+        )
 
     def set_nres(self, nres: int) -> str:
         """Set the value of an integer field (for side-effect testing)."""
@@ -181,6 +195,11 @@ class SinkTestCase(unittest.TestCase):
 class JoinTestCase(unittest.TestCase):
     """A test suite for Pythoid Join class."""
 
+    def setUp(self) -> None:
+        logging.basicConfig(
+            format=LOG_MSG_FORMAT, datefmt=LOG_DATE_FORMAT, level=logging.WARNING
+        )
+
     def test_abstract_join(self):
         """Tests creating an abstract Join instance."""
         join = Join({"a"})  # type: ignore
@@ -213,7 +232,7 @@ class AplusBtimesCjoin(Join[IntCtx, int]):
         super().__init__({"a", "b", "c"})
         self.underlying = lambda _, **kw: (kw["a"] + kw["b"]) * kw["c"]
 
-    def __call__(self, ctx: IntCtx, **args: int) -> int:
+    def _do_call__(self, ctx: IntCtx, **args: int) -> int:
         return self.underlying(ctx, **args)
 
 
@@ -233,7 +252,7 @@ class AplusBtimesCmodule(Module[IntCtx, int]):
         self.result = 0
         self.underlying = lambda _, **kw: self.set_result((kw["a"] + kw["b"]) * kw["c"])
 
-    def __call__(self, ctx: IntCtx, **args: int) -> str:
+    def _do_call__(self, ctx: IntCtx, **args: int) -> str:
         return self.underlying(ctx, **args)
 
 
@@ -242,6 +261,9 @@ class PipelineTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self.nres = -1
+        logging.basicConfig(
+            format=LOG_MSG_FORMAT, datefmt=LOG_DATE_FORMAT, level=logging.WARNING
+        )
 
     def set_nres(self, nres: int) -> str:
         """Set the value of an integer field (for side-effect testing)."""

@@ -3,6 +3,9 @@
 import os
 from pathlib import Path
 
+LOG_MSG_FORMAT = "%(asctime)s %(levelname)s - %(name)s.%(funcName)s: %(message)s"
+LOG_DATE_FORMAT = "%H:%M:%S"
+
 
 def cur_dir() -> Path:
     """Returns current folder."""

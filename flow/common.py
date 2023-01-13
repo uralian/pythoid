@@ -1,5 +1,5 @@
 """Module providing building common blocks for Pythoid dataflows."""
-
+import logging
 from abc import abstractmethod
 from typing import Any, Callable, Dict, Generic, Optional, Set, Tuple, TypeVar
 
@@ -23,20 +23,40 @@ MultiInputFunc = Callable[[CTX, KwArg(T)], T | Any]
 class Node(Generic[CTX, T]):
     """An abstract dataflow node."""
 
+    def __init__(self):
+        self.log: logging.Logger
+        object.__setattr__(self, "log", logging.getLogger(self.__class__.__name__))
+        self.log.info("self=%s", self)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(#{id(self)})"
+
 
 class NoInput(Node[CTX, T]):
     """A node that has does not have an input other than the execution context."""
 
-    @abstractmethod
     def __call__(self, ctx: CTX):
+        self.log.debug("self=%s, ctx=%s", self, ctx)
+        result = self._do_call__(ctx)
+        self.log.debug("self=%s, result=%s", self, result)
+        return result
+
+    @abstractmethod
+    def _do_call__(self, ctx: CTX):
         raise NotImplementedError("Must be implemented by subclasses")
 
 
 class SingleInput(Node[CTX, T]):
     """A node that has a single input."""
 
-    @abstractmethod
     def __call__(self, ctx: CTX, arg: T):
+        self.log.debug("self=%s, ctx=%s, arg=%s", self, ctx, arg)
+        result = self._do_call__(ctx, arg)
+        self.log.debug("self=%s, result=%s", self, result)
+        return result
+
+    @abstractmethod
+    def _do_call__(self, ctx: CTX, arg: T):
         raise NotImplementedError("Must be implemented by subclasses")
 
 
@@ -45,9 +65,16 @@ class MultiInput(Node[CTX, T]):
 
     def __init__(self, names: Set[str]) -> None:
         object.__setattr__(self, "names", names)
+        super().__init__()
+
+    def __call__(self, ctx: CTX, **args: T):
+        self.log.debug("self=%s, ctx=%s, args=%s", self, ctx, args)
+        result = self._do_call__(ctx, **args)
+        self.log.debug("self=%s, result=%s", self, result)
+        return result
 
     @abstractmethod
-    def __call__(self, ctx: CTX, **args: T):
+    def _do_call__(self, ctx: CTX, **args: T):
         raise NotImplementedError("Must be implemented by subclasses")
 
     def input_names(self) -> Set[str]:
@@ -58,6 +85,9 @@ class MultiInput(Node[CTX, T]):
         """Returns the number of inputs for this node."""
         return len(self.input_names())
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.input_names()})"
+
 
 class Source(NoInput[CTX, T]):
     """
@@ -66,23 +96,27 @@ class Source(NoInput[CTX, T]):
     """
 
     @abstractmethod
-    def __call__(self, ctx: CTX) -> T:
+    def _do_call__(self, ctx: CTX) -> T:
         raise NotImplementedError("Must be implemented by subclasses")
 
     def to_transformer(self, other: "Transformer[CTX, T]") -> "Source[CTX, T]":
         """Connects the output of this source node to the input of a Transformer."""
+        self.log.info("self=%s, other=%s", self, other)
         return self._to_single_input(SimpleSource, other)
 
     def to_join(self, other: "Join[CTX, T]", name: str) -> "Join[CTX, T]":
         """Connects the output of this source node to an input of a Join."""
+        self.log.info("self=%s, other=%s, name=%s", self, other, name)
         return self._to_multi_input(SimpleJoin, other, name)
 
     def to_stub(self, other: "Stub[CTX, T]") -> "Task[CTX, T]":
         """Connects the output of this source node to the input of a Stub."""
+        self.log.info("self=%s, other=%s", self, other)
         return self._to_single_input(SimpleTask, other)
 
     def to_module(self, other: "Module[CTX, T]", name: str) -> "Module[CTX, T]":
         """Connects the output of this source node to an input of a Module."""
+        self.log.info("self=%s, other=%s, name=%s", self, other, name)
         return self._to_multi_input(SimpleModule, other, name)
 
     def _to_single_input(
@@ -124,8 +158,9 @@ class SimpleSource(Source[CTX, T]):
 
     def __init__(self, func: Callable[[CTX], T]) -> None:
         self.underlying = func
+        super().__init__()
 
-    def __call__(self, ctx: CTX) -> T:
+    def _do_call__(self, ctx: CTX) -> T:
         return self.underlying(ctx)
 
 
@@ -136,27 +171,35 @@ class Transformer(SingleInput[CTX, T]):
     """
 
     @abstractmethod
-    def __call__(self, ctx: CTX, arg: T) -> T:
+    def _do_call__(self, ctx: CTX, arg: T) -> T:
         raise NotImplementedError("Must be implemented by subclasses")
 
     def to_transformer(self, other: "Transformer[CTX, T]") -> "Transformer[CTX, T]":
         """Connects the output of this transformer node to the input of another Transformer."""
+        self.log.info("self=%s, other=%s", self, other)
         return self._to_single_input(SimpleTransformer, other)
 
     def to_join(
         self, other: "Join[CTX, T]", name: str, new_name: Optional[str] = None
     ) -> "Join[CTX, T]":
         """Connects the output of this transformer node to an input of a Join."""
+        self.log.info(
+            "self=%s, other=%s, name=%s, new_name=%s", self, other, name, new_name
+        )
         return self._to_multi_input(SimpleJoin, other, name, new_name)
 
     def to_stub(self, other: "Stub[CTX, T]") -> "Stub[CTX, T]":
         """Connects the output of this transformer node to the input of a Stub."""
+        self.log.info("self=%s, other=%s", self, other)
         return self._to_single_input(SimpleStub, other)
 
     def to_module(
         self, other: "Module[CTX, T]", name: str, new_name: Optional[str] = None
     ) -> "Module[CTX, T]":
         """Connects the output of this transformer node to an input of a Module."""
+        self.log.info(
+            "self=%s, other=%s, name=%s, new_name=%s", self, other, name, new_name
+        )
         return self._to_multi_input(SimpleModule, other, name, new_name)
 
     def _to_single_input(
@@ -207,8 +250,9 @@ class SimpleTransformer(Transformer[CTX, T]):
 
     def __init__(self, func: Callable[[CTX, T], T]) -> None:
         self.underlying = func
+        super().__init__()
 
-    def __call__(self, ctx: CTX, arg: T) -> T:
+    def _do_call__(self, ctx: CTX, arg: T) -> T:
         return self.underlying(ctx, arg)
 
 
@@ -219,11 +263,12 @@ class Join(MultiInput[CTX, T]):
     """
 
     @abstractmethod
-    def __call__(self, ctx: CTX, **args: T) -> T:
+    def _do_call__(self, ctx: CTX, **args: T) -> T:
         raise NotImplementedError("Must be implemented by subclasses")
 
     def to_transformer(self, other: "Transformer[CTX, T]") -> "Join[CTX, T]":
         """Connects the output of this join node to the input of a Transformer."""
+        self.log.info("self=%s, other=%s", self, other)
         return self._to_single_input(SimpleJoin, other)
 
     def to_join(
@@ -233,10 +278,14 @@ class Join(MultiInput[CTX, T]):
         inputs_remap: Optional[Dict[str, str]] = None,
     ) -> "Join[CTX, T]":
         """Connects the output of this join node to an input of another Join."""
+        self.log.info(
+            "self=%s, other=%s, name=%s, remap=%s", self, other, name, inputs_remap
+        )
         return self._to_multi_input(SimpleJoin, other, name, inputs_remap)
 
     def to_stub(self, other: "Stub[CTX, T]") -> "Module[CTX, T]":
         """Connects the output of this join node to the input of a Stub."""
+        self.log.info("self=%s, other=%s", self, other)
         return self._to_single_input(SimpleModule, other)
 
     def to_module(
@@ -246,6 +295,9 @@ class Join(MultiInput[CTX, T]):
         inputs_remap: Optional[Dict[str, str]] = None,
     ) -> "Module[CTX, T]":
         """Connects the output of this join node to an input of Module."""
+        self.log.info(
+            "self=%s, other=%s, name=%s, remap=%s", self, other, name, inputs_remap
+        )
         return self._to_multi_input(SimpleModule, other, name, inputs_remap)
 
     def _to_single_input(
@@ -305,10 +357,10 @@ class SimpleJoin(Join[CTX, T]):
     """A simple implementation of Join interface based on a function passed into constructor."""
 
     def __init__(self, names: Set[str], func: Callable[[CTX, KwArg(T)], T]) -> None:
-        super().__init__(names)
         self.underlying = func
+        super().__init__(names)
 
-    def __call__(self, ctx: CTX, **args: T) -> T:
+    def _do_call__(self, ctx: CTX, **args: T) -> T:
         return self.underlying(ctx, **args)
 
 
@@ -319,7 +371,7 @@ class Task(NoInput[CTX, T]):
     """
 
     @abstractmethod
-    def __call__(self, ctx: CTX) -> Any:
+    def _do_call__(self, ctx: CTX) -> Any:
         raise NotImplementedError("Must be implemented by subclasses")
 
 
@@ -328,8 +380,9 @@ class SimpleTask(Task[CTX, T]):
 
     def __init__(self, func: Callable[[CTX], Any]) -> None:
         self.underlying = func
+        super().__init__()
 
-    def __call__(self, ctx: CTX) -> Any:
+    def _do_call__(self, ctx: CTX) -> Any:
         return self.underlying(ctx)
 
 
@@ -340,7 +393,7 @@ class Stub(SingleInput[CTX, T]):
     """
 
     @abstractmethod
-    def __call__(self, ctx: CTX, arg: T) -> Any:
+    def _do_call__(self, ctx: CTX, arg: T) -> Any:
         raise NotImplementedError("Must be implemented by subclasses")
 
 
@@ -349,8 +402,9 @@ class SimpleStub(Stub[CTX, T]):
 
     def __init__(self, func: Callable[[CTX, T], Any]) -> None:
         self.underlying = func
+        super().__init__()
 
-    def __call__(self, ctx: CTX, arg: T) -> Any:
+    def _do_call__(self, ctx: CTX, arg: T) -> Any:
         return self.underlying(ctx, arg)
 
 
@@ -361,7 +415,7 @@ class Module(MultiInput[CTX, T]):
     """
 
     @abstractmethod
-    def __call__(self, ctx: CTX, **args: T) -> Any:
+    def _do_call__(self, ctx: CTX, **args: T) -> Any:
         raise NotImplementedError("Must be implemented by subclasses")
 
 
@@ -369,10 +423,10 @@ class SimpleModule(Module[CTX, T]):
     """A simple implementation of Module interface based on a function passed into constructor."""
 
     def __init__(self, names: Set[str], func: Callable[[CTX, KwArg(T)], Any]) -> None:
-        super().__init__(names)
         self.underlying = func
+        super().__init__(names)
 
-    def __call__(self, ctx: CTX, **args: T) -> Any:
+    def _do_call__(self, ctx: CTX, **args: T) -> Any:
         return self.underlying(ctx, **args)
 
 
