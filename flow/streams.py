@@ -22,8 +22,11 @@ class StreamFileSource(Source[SparkSession, DataFrame]):
     schema: Optional[SchemaLike] = None
     options: Dict[str, Any] = field(default_factory=dict)
 
-    def __call__(self, spark: SparkSession) -> DataFrame:
-        reader = spark.readStream.format(self.format).options(**self.options)
+    def __post_init__(self):
+        super().__init__()
+
+    def _do_call__(self, ctx: SparkSession) -> DataFrame:
+        reader = ctx.readStream.format(self.format).options(**self.options)
         return reader.load(str(self.path), schema=self.schema)
 
 
@@ -34,7 +37,10 @@ class StreamFileSink(Stub[SparkSession, DataFrame]):
     path: Path
     format: str
 
-    def __call__(self, spark: SparkSession, arg: DataFrame) -> StreamingQuery:
+    def __post_init__(self):
+        super().__init__()
+
+    def _do_call__(self, ctx: SparkSession, arg: DataFrame) -> StreamingQuery:
         return (
             arg.writeStream.trigger(processingTime="500 millisecond")
             .format("json")

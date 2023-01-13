@@ -1,5 +1,5 @@
 """Module providing unit tests for Pythoid Spark blocks."""
-
+import logging
 import tempfile
 import unittest
 import warnings
@@ -9,7 +9,7 @@ from pyspark import Row
 from pyspark.sql import SparkSession
 
 from flow.frames import DFFileSource, DFFilter, DFQuery, DFSingleTableQuery, DFTableSink
-from tests import data_filepath
+from tests import LOG_DATE_FORMAT, LOG_MSG_FORMAT, data_filepath
 
 
 class DFramesTestCase(unittest.TestCase):
@@ -21,6 +21,9 @@ class DFramesTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        logging.basicConfig(
+            format=LOG_MSG_FORMAT, datefmt=LOG_DATE_FORMAT, level=logging.WARNING
+        )
         warnings.filterwarnings("ignore", category=ResourceWarning)
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         cls.spark = SparkSession.builder.getOrCreate()

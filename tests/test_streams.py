@@ -1,5 +1,5 @@
 """Module providing unit tests for Pythoid Spark Streaming blocks."""
-
+import logging
 import shutil
 import tempfile
 import unittest
@@ -14,7 +14,7 @@ from pyspark.sql.streaming import StreamingQuery
 
 from flow.frames import DFFilter, DFSingleTableQuery
 from flow.streams import StreamFileSink, StreamFileSource
-from tests import data_filepath
+from tests import LOG_DATE_FORMAT, LOG_MSG_FORMAT, data_filepath
 
 
 class StreamTestCase(unittest.TestCase):
@@ -24,6 +24,9 @@ class StreamTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        logging.basicConfig(
+            format=LOG_MSG_FORMAT, datefmt=LOG_DATE_FORMAT, level=logging.WARNING
+        )
         warnings.filterwarnings("ignore", category=ResourceWarning)
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         cls.spark = SparkSession.builder.getOrCreate()

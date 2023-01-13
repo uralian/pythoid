@@ -42,5 +42,5 @@ repos:
     rev: v2.15.9
     hooks:
       - id: pylint
-        args: [--min-public-methods, "0", --good-names, "i,df,sq,tx"]
+        args: [--min-public-methods, "0", --good-names, "i,df,sq,tx", --min-similarity-lines, "5"]
         additional_dependencies: [mypy_extensions, pyspark]

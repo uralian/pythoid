@@ -21,9 +21,12 @@ class DFFileSource(Source[SparkSession, DataFrame]):
     schema: Optional[SchemaLike] = None
     options: Dict[str, Any] = field(default_factory=dict)
 
-    def __call__(self, spark: SparkSession) -> DataFrame:
+    def __post_init__(self):
+        super().__init__()
+
+    def _do_call__(self, ctx: SparkSession) -> DataFrame:
         return (
-            spark.read.format(self.format)
+            ctx.read.format(self.format)
             .options(**self.options)
             .load(str(self.path), schema=self.schema)
         )
@@ -35,7 +38,10 @@ class DFFilter(Transformer[SparkSession, DataFrame]):
 
     condition: str
 
-    def __call__(self, spark: SparkSession, arg: DataFrame) -> DataFrame:
+    def __post_init__(self):
+        super().__init__()
+
+    def _do_call__(self, ctx: SparkSession, arg: DataFrame) -> DataFrame:
         return arg.filter(self.condition)
 
 
@@ -46,9 +52,12 @@ class DFSingleTableQuery(Transformer[SparkSession, DataFrame]):
     sql_query: str
     alias: str
 
-    def __call__(self, spark: SparkSession, arg: DataFrame) -> DataFrame:
+    def __post_init__(self):
+        super().__init__()
+
+    def _do_call__(self, ctx: SparkSession, arg: DataFrame) -> DataFrame:
         arg.createOrReplaceTempView(self.alias)
-        return spark.sql(self.sql_query)
+        return ctx.sql(self.sql_query)
 
 
 @dataclass(kw_only=True, frozen=True, init=False)
@@ -61,7 +70,7 @@ class DFQuery(Join[SparkSession, DataFrame]):
         super().__init__(names)
         object.__setattr__(self, "sql_query", sql_query)
 
-    def __call__(self, ctx: SparkSession, **args: DataFrame) -> DataFrame:
+    def _do_call__(self, ctx: SparkSession, **args: DataFrame) -> DataFrame:
         for name, df in args.items():
             df.createOrReplaceTempView(name)
         return ctx.sql(self.sql_query)
@@ -76,7 +85,10 @@ class DFTableSink(Stub[SparkSession, DataFrame]):
     mode: str
     path: Path
 
-    def __call__(self, ctx: SparkSession, arg: DataFrame) -> None:
+    def __post_init__(self):
+        super().__init__()
+
+    def _do_call__(self, ctx: SparkSession, arg: DataFrame) -> None:
         arg.write.format(self.format).mode(self.mode).option(
             "path", str(self.path)
         ).saveAsTable(self.table_name)
