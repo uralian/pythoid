@@ -437,6 +437,27 @@ class PipelineTestCase(unittest.TestCase):
         self.assertSetEqual(pipe.input_names(), {"aa", "b", "cc", "e", "f"})
         self.assertEqual(pipe({}, aa=1, b=2, cc=4, e=8, f=16), 4)
 
+    def test_valid_input_name(self):
+        """Tests connecting nodes to non-existing inputs."""
+        src = SimpleSource[IntCtx, int](lambda ctx: ctx["a"])
+        tx = SimpleTransformer[Any, int](lambda _, x: x * 2)
+        join = AplusBtimesCjoin()
+        mod = AplusBtimesCmodule()
+
+        self.assertRaises(AssertionError, lambda: src.to_join(join, "?"))
+        self.assertRaises(AssertionError, lambda: src.to_module(mod, "?"))
+        self.assertRaises(AssertionError, lambda: tx.to_join(join, "?"))
+        self.assertRaises(AssertionError, lambda: tx.to_module(mod, "?"))
+        self.assertRaises(AssertionError, lambda: join.to_join(join, "?"))
+        self.assertRaises(AssertionError, lambda: join.to_module(mod, "?"))
+
+    def test_valid_remap_key(self):
+        """Tests connecting nodes with non-existing inputs remap keys."""
+        join = AplusBtimesCjoin()
+        mod = AplusBtimesCmodule()
+        self.assertRaises(AssertionError, lambda: join.to_join(join, "a", {"?": "aa"}))
+        self.assertRaises(AssertionError, lambda: join.to_module(mod, "a", {"?": "aa"}))
+
 
 if __name__ == "__main__":
     unittest.main()
