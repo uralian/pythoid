@@ -24,7 +24,7 @@ class Node(Generic[CTX, T]):
     """An abstract dataflow node."""
 
     def __init__(self):
-        self.log: logging.Logger
+        self.log: logging.Logger  # had to add this to keep mypy happy
         object.__setattr__(self, "log", logging.getLogger(self.__class__.__name__))
         self.log.info("self=%s", self)
 
@@ -85,6 +85,12 @@ class MultiInput(Node[CTX, T]):
         """Returns the number of inputs for this node."""
         return len(self.input_names())
 
+    def assert_name_exists(self, name):
+        """Raises AssertionError if the specified name is not among the input names."""
+        assert (
+            name in self.input_names()
+        ), f"Input '{name}' not found in node inputs: {self.input_names()}"
+
     def __repr__(self):
         return f"{self.__class__.__name__}({self.input_names()})"
 
@@ -130,6 +136,7 @@ class Source(NoInput[CTX, T]):
         other: MultiInput,
         name: str,
     ) -> MultiInputT:
+        other.assert_name_exists(name)
         new_names = remove_set_items(other.input_names(), name)
         return cls(
             new_names,
@@ -214,6 +221,7 @@ class Transformer(SingleInput[CTX, T]):
         name: str,
         new_name: Optional[str] = None,
     ) -> MultiInputT:
+        other.assert_name_exists(name)
         arg_name: str = new_name or name
         new_names = add_set_items(remove_set_items(other.input_names(), name), arg_name)
         return cls(
@@ -314,6 +322,11 @@ class Join(MultiInput[CTX, T]):
         name: str,
         inputs_remap: Optional[Dict[str, str]] = None,
     ) -> MultiInputT:
+        other.assert_name_exists(name)
+        if inputs_remap:
+            for key in inputs_remap.keys():
+                self.assert_name_exists(key)
+
         remap: dict[str, str] = inputs_remap or {}
         new2old = dict(((remap.get(name) or name), name) for name in self.input_names())
 
