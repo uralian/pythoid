@@ -144,17 +144,120 @@ The following methods and operator equivalents are provided for composing the no
 |Connects this node's output to the input of a Stub|to_stub|>|
 |Connects this node's output to an input of a Module|to_module|\||
 
+The result of the node composition is, a function extending one of the basic node types. It can be invoked using the standard function calling syntax:
+
+```python
+pipeline1 = src1 >> tx1 >> tx2  # pipeline1 is a Source
+result1 = pipeline1(context)
+
+pipeline2 = tx1 >> tx2  # pipeline2 is a Transformer
+result2 = pipeline2(context, 5)
+
+pipeline3 = join1 >> tx1 >> stub  # pipeline3 is a Module
+pipeline3(context, a=1, b=2, ...)
+```
+
 ### Builder Syntax
 
 Composing a large number of nodes together may become messy and hard to read. Alternatively, one can use builder syntax to chain nodes togeter:
 
 ```python
-builder = PipelineBuilder()
-builder.connect(src1, tx1)
-builder.connect(src2, tx2)
-builder.connect(tx1, merge, "a")
-builder.connect(tx2, merge, "b")
+builder = FlowBuilder()
+builder.connect(src1).to(tx1)
+builder.connect(src2).to(tx2)
+builder.connect(tx1).to(merge).as_input("a")
+builder.connect(tx2).to(merge).as_input("b").rename_input("c")
 pipeline = builder.build()
+```
+
+### PlantUML
+
+Pythod supports both importing from and exporting to PlantUML.
+
+#### Import
+
+You can import a PlantUML file as a Pythoid flow. It can follow a standard [Component Diagram](https://plantuml.com/component-diagram) syntax. All theme settings, skin parameters, decorations etc are ignored. The only requirements are:
+1. When connecting a node to an input of a Merge or Module, the `name_input` syntax must be used. So `X --> Y_a` means "connect the output of node **X** to input **a** of node **Y**."
+2. The file must have a JSON section called "nodes" where all nodes are defined. The key of each entry inside the JSON is the alias used for the node (hence they should match the ones used in the connections), and the value is a JSON object with at least one key - "class", which is the Python class for this node. The rest of the elements must match the constructor parameters for this class.
+
+Here is an example. Let's say you implemented a few custom node classes in your project (you can also use ones from the Pythoid standard library) in a file "**custom_nodes.py**":
+
+```python
+IntCtx = Dict[str, int]
+
+class GetContext(SimpleSource[IntCtx, int]):
+    def __init__(self, *, key: str):
+        self.key = key
+        super().__init__(lambda ctx: ctx[key])
+
+class Multiplier(SimpleTransformer[IntCtx, int]):
+    def __init__(self, *, value: int):
+        self.value = value
+        super().__init__(lambda _, x: x * value)
+
+class Eval(SimpleJoin[IntCtx, int]):
+    def __init__(self, *, inputs: List[str], expression: str):
+        self.expression = expression
+        super().__init__(set(inputs), lambda _, **kw: eval(expression, kw))
+```
+
+Then we composed a sample PlantUML file "**flow.puml**":
+```plantuml
+@startuml
+
+component [ctx(a)] as srcA
+component [ctx(b)] as srcB
+
+component [x*2] as times2
+component [x*3] as times3
+
+component [u+w] as sum <<join>> {
+  portin "u" as sum_u
+  portin "w" as sum_w
+}
+
+srcA --> times2
+srcB --> times3
+times2 --> sum_u
+times3 --> sum_w
+
+json nodes {
+  "srcA": {
+    "class": "GetContext",
+    "key": "a"
+  },
+  "srcB": {
+    "class": "GetContext",
+    "key": "b"
+  },
+  "times2": {
+    "class": "Multiplier",
+    "value": 2
+  },
+  "times3": {
+    "class": "Multiplier",
+    "value": 3
+  },
+  "sum": {
+    "class": "Eval",
+    "inputs": ["u", "w"],
+    "expression": "u + w"
+  }
+}
+
+@enduml
+```
+
+As you see, we create a few nodes (two Sources, two Transformers and one Join) and connect them as usual. *Again, keep in mind that PlantUML flow builder only analyzes the connections and `json nodes` sections, it ignores everything else. So those `component` definitions are simply to be able to render this file by PlantUML, if needed.*
+
+Now we can import the flow definition and run the flow:
+
+```python
+builder = PlantumlFlowBuilder.from_file("flow.puml")
+builder.add_module("custom_nodes")
+flow = builder.build_flow()
+context = {"a": 4, "b": 3}
+result = flow(context, w=5)
 ```
 
 To be continued.

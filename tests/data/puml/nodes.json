@@ -1,0 +1,40 @@
+{
+  "srcA": {
+    "class": "GetContext",
+    "key": "a"
+  },
+  "srcB": {
+    "class": "GetContext",
+    "key": "b"
+  },
+  "srcC": {
+    "class": "GetContext",
+    "key": "c"
+  },
+  "times2": {
+    "class": "Multiplier",
+    "value": 2
+  },
+  "plus3": {
+    "class": "Adder",
+    "value": 3
+  },
+  "minus1": {
+    "class": "Adder",
+    "value": -1
+  },
+  "rem3": {
+    "class": "Remainder",
+    "value": 3
+  },
+  "j1": {
+    "class": "Eval",
+    "inputs": ["u", "w"],
+    "expression": "u * w"
+  },
+  "j2": {
+    "class": "Eval",
+    "inputs": ["x", "y", "z"],
+    "expression": "x + y - z"
+  }
+}

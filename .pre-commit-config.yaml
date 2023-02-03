@@ -37,7 +37,7 @@ repos:
     rev: 6.0.0
     hooks:
       - id: flake8
-        args: [--ignore, E501]
+        args: [--ignore, E501, --extend-ignore, E203, --max-line-length, "88"]
   - repo: https://github.com/PyCQA/pylint
     rev: v2.15.9
     hooks:

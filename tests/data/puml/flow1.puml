@@ -1,0 +1,95 @@
+@startuml
+'https://plantuml.com/component-diagram
+
+hide stereotypes
+
+allowmixing
+
+skinparam handwritten true
+skinparam component {
+  backgroundColor<<source>> DarkKhaki
+  backgroundColor<<transformer>> Green
+  backgroundColor<<join>> Yellow
+}
+skinparam interface {
+  backgroundColor<<input>> Cyan
+  backgroundColor<<output>> Magenta
+}
+
+component [ctx(a)] as srcA <<source>>
+component [ctx(b)] as srcB <<source>>
+component [ctx(c)] as srcC <<source>>
+
+component [x*2] as times2 <<transformer>>
+component [x+3] as plus3 <<transformer>>
+component [x-1] as minus1 <<transformer>>
+component [x%3] as rem3 <<transformer>>
+
+component [u*w] as j1 <<join>> {
+  portin "u" as j1_u
+  portin "w" as j1_w
+}
+
+component [x+y-z] as j2 <<join>> {
+  portin "x" as j2_x
+  portin "y" as j2_y
+  portin "z" as j2_z
+}
+
+srcA --> minus1
+srcB --> j1_u
+srcC --> rem3
+minus1 --> j2_x
+j1 --> j2_y
+rem3 --> times2
+times2 --> j2_z
+j2 --> plus3
+
+'() "w" as iw <<input>>
+'iw --> j1_w
+
+'() o <<output>>
+'plus3 --> o
+
+json nodes {
+  "srcA": {
+    "class": "GetContext",
+    "key": "a"
+  },
+  "srcB": {
+    "class": "GetContext",
+    "key": "b"
+  },
+  "srcC": {
+    "class": "GetContext",
+    "key": "c"
+  },
+  "times2": {
+    "class": "Multiplier",
+    "value": 2
+  },
+  "plus3": {
+    "class": "Adder",
+    "value": 3
+  },
+  "minus1": {
+    "class": "Adder",
+    "value": -1
+  },
+  "rem3": {
+    "class": "Remainder",
+    "value": 3
+  },
+  "j1": {
+    "class": "Eval",
+    "inputs": ["u", "w"],
+    "expression": "u * w"
+  },
+  "j2": {
+    "class": "Eval",
+    "inputs": ["x", "y", "z"],
+    "expression": "x + y - z"
+  }
+}
+
+@enduml
