@@ -137,6 +137,11 @@ class FlowBuilder(Generic[CTX, T]):
         """Returns a Connector object for the specified node."""
         return Connector(self, node)
 
+    def add_connection(self, conn: Connection) -> None:
+        """Adds a connection to the builder."""
+        self.log.info("connection=%s", conn)
+        self.connections.append(conn)
+
     def build(self) -> Node[CTX, T]:
         """Evaluates the connection list and builds the flow."""
         for con in self.connections:
